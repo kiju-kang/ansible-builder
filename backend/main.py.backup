@@ -4,10 +4,6 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-
-# Project imports
-from models import YamlTextImport, Task, Playbook, Inventory, ExecutionRequest, AWXJobRequest
-from utils import resolve_yaml_imports
 from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
 import subprocess
@@ -19,7 +15,6 @@ import asyncio
 import httpx
 import json
 import re
-import traceback
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
@@ -39,11 +34,6 @@ print("✓ Keycloak SSO authentication enabled")
 
 # Ansible 호스트 키 확인 비활성화
 os.environ['ANSIBLE_HOST_KEY_CHECKING'] = 'False'
-
-# AWX 통합 설정 (환경 변수에서 로드)
-AWX_URL = os.getenv('AWX_URL', 'http://192.168.64.26:30000')
-AWX_TOKEN = os.getenv('AWX_TOKEN', '')
-print(f"✓ AWX integration configured: {AWX_URL}")
 
 app = FastAPI(title="Ansible Playbook Builder API")
 
@@ -71,131 +61,95 @@ app.add_middleware(
 # get_current_user_keycloak: 관리자 권한 필수
 # ============================================
 
+# --- START: Added Helper Function for YAML imports ---
+def _resolve_yaml_imports(yaml_content: str, base_dir: str) -> str:
+    """
+    Recursively resolves `import: <file>` statements in a YAML string.
+    This is a simple text-based substitution that respects indentation.
+    """
+    # Regex to find 'import: "path"' and capture the indentation
+    import_pattern = re.compile(r'^(?P<indent>\s*)-?\s*import:\s*["\']?(?P<path>[\w\./\\-]+)["\']?\s*$', re.MULTILINE)
 
+    def replacer(match):
+        indent = match.group('indent')
+        import_path = match.group('path')
+        
+        # For security, ensure the path is relative and within the project.
+        if ".." in import_path:
+            return f"{indent}# ERROR: Directory traversal is not allowed."
+
+        abs_path = os.path.normpath(os.path.join(base_dir, import_path))
+
+        if not abs_path.startswith(os.path.abspath(base_dir)):
+            return f"{indent}# ERROR: Import path is outside the allowed directory."
+
+        try:
+            with open(abs_path, 'r', encoding='utf-8') as f:
+                imported_content = f.read()
+                
+                # Indent the imported content to match the `import:` line's base indentation
+                indented_content = '\n'.join([f"{indent}{line}" for line in imported_content.splitlines()])
+                
+                # Recursively resolve imports in the newly imported content
+                return _resolve_yaml_imports(indented_content, base_dir=os.path.dirname(abs_path))
+        except FileNotFoundError:
+            return f"{indent}# ERROR: Imported file not found at {import_path}"
+        except Exception as e:
+            return f"{indent}# ERROR: Failed to import file: {e}"
+
+    # Keep replacing until no more imports are found
+    resolved_content = yaml_content
+    for _ in range(10): # Max 10 levels of recursion
+        new_content = import_pattern.sub(replacer, resolved_content)
+        if new_content == resolved_content:
+            break
+        resolved_content = new_content
+    else:
+        # If the loop completes, there might be a circular import. 
+        # We return the content as is and let the YAML parser fail.
+        pass
+
+    return resolved_content
+# --- END: Added Helper Function ---
+
+
+class YamlTextImport(BaseModel):
+    content: str
+
+# 데이터 모델
+class Task(BaseModel):
+    name: str
+    module: str
+    params: Dict[str, str]
+
+class Playbook(BaseModel):
+    id: Optional[int] = None
+    name: str
+    hosts: str
+    become: bool
+    tasks: List[Task]
+    created_at: Optional[str] = None
+
+class Inventory(BaseModel):
+    id: Optional[int] = None
+    name: str
+    content: str
+    created_at: Optional[str] = None
+
+class ExecutionRequest(BaseModel):
+    playbook_id: int
+    inventory_id: int
+    extra_vars: Optional[Dict[str, str]] = {}
+
+class AWXJobRequest(BaseModel):
+    playbook_id: int
+    inventory_id: int
+    awx_url: str
+    awx_username: str
+    awx_password: str
+    job_template_id: Optional[int] = None
 
 # Playbook CRUD (DB 사용)
-def log_action(db, user, action, resource_type, resource_id, description, ip_address=None):
-    """Audit logging stub - logs actions to console"""
-    user_info = user.username if user else "anonymous"
-    print(f"[AUDIT] {action} {resource_type}#{resource_id} by {user_info}: {description}")
-
-def validate_task_params(tasks: List[Task]) -> dict:
-    """
-    Validate task parameters to detect issues that would fail in AWX executor.
-    Returns a dict with 'valid' boolean and 'warnings' list.
-    """
-    warnings = []
-
-    for idx, task in enumerate(tasks, 1):
-        # Check for nested loop patterns ({{ item }} in params)
-        for param_key, param_value in task.params.items():
-            if isinstance(param_value, str) and '{{ item }}' in param_value:
-                warnings.append({
-                    "task_index": idx,
-                    "task_name": task.name,
-                    "issue": "nested_loop",
-                    "message": f"Task #{idx} '{task.name}' uses '{{{{ item }}}}' in params.{param_key}. "
-                               f"This will not work in AWX executor. "
-                               f"Please split into separate tasks or use shell/command module with explicit values."
-                })
-
-    return {
-        "valid": len(warnings) == 0,
-        "warnings": warnings
-    }
-
-def validate_yaml_content(content: str) -> dict:
-    """
-    Validate YAML content syntax.
-    Returns a dict with 'valid' boolean, 'error' message, and 'line' number if invalid.
-    """
-    try:
-        yaml.safe_load(content)
-        return {
-            "valid": True,
-            "error": None,
-            "line": None
-        }
-    except yaml.YAMLError as e:
-        error_msg = str(e)
-        line_num = None
-
-        # Extract line number from error message if available
-        if hasattr(e, 'problem_mark'):
-            mark = e.problem_mark
-            line_num = mark.line + 1  # YAML uses 0-based indexing
-            column = mark.column + 1
-            error_msg = f"YAML syntax error at line {line_num}, column {column}: {e.problem}"
-
-        return {
-            "valid": False,
-            "error": error_msg,
-            "line": line_num
-        }
-    except Exception as e:
-        return {
-            "valid": False,
-            "error": f"YAML parsing error: {str(e)}",
-            "line": None
-        }
-
-def validate_script_content(content: str) -> dict:
-    """
-    Validate shell script content syntax using bash -n (dry-run).
-    Returns a dict with 'valid' boolean, 'error' message, and 'line' number if invalid.
-    """
-    try:
-        # Check for empty content
-        if not content.strip():
-            return {
-                "valid": False,
-                "error": "Script content is empty",
-                "line": None
-            }
-
-        # Use bash -n to check syntax without executing
-        result = subprocess.run(
-            ['bash', '-n'],
-            input=content.encode('utf-8'),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=5
-        )
-
-        if result.returncode == 0:
-            return {
-                "valid": True,
-                "error": None,
-                "line": None
-            }
-        else:
-            error_msg = result.stderr.decode('utf-8').strip()
-            line_num = None
-
-            # Extract line number from bash error message
-            # Format: "bash: line X: ..."
-            line_match = re.search(r'line (\d+):', error_msg)
-            if line_match:
-                line_num = int(line_match.group(1))
-
-            return {
-                "valid": False,
-                "error": error_msg or "Shell script syntax error",
-                "line": line_num
-            }
-    except subprocess.TimeoutExpired:
-        return {
-            "valid": False,
-            "error": "Script validation timeout (syntax check took too long)",
-            "line": None
-        }
-    except Exception as e:
-        return {
-            "valid": False,
-            "error": f"Script validation error: {str(e)}",
-            "line": None
-        }
-
 @app.post("/api/playbooks", response_model=Playbook)
 async def create_playbook(
     playbook: Playbook,
@@ -203,14 +157,6 @@ async def create_playbook(
     db: Session = Depends(get_db),
     current_user: Optional[AnsibleBuilderUser] = Depends(get_optional_user_keycloak)
 ):
-    # Validate task parameters
-    validation = validate_task_params(playbook.tasks)
-    if not validation['valid']:
-        # Log warnings but allow creation
-        print(f"⚠️ Playbook '{playbook.name}' has validation warnings:")
-        for warning in validation['warnings']:
-            print(f"  - Task #{warning['task_index']}: {warning['message']}")
-
     db_playbook = AnsibleBuilderPlaybook(
         name=playbook.name,
         hosts=playbook.hosts,
@@ -417,18 +363,11 @@ async def import_playbook_from_yaml(file: UploadFile = File(...), db: Session = 
         # 파일 읽기
         content = await file.read()
         yaml_content = content.decode('utf-8')
-
-        # YAML 구문 검사
-        validation = validate_yaml_content(yaml_content)
-        if not validation['valid']:
-            line_info = f" (line {validation['line']})" if validation['line'] else ""
-            error_msg = f"YAML syntax error{line_info}: {validation['error']}"
-            raise HTTPException(status_code=400, detail=error_msg)
-
+        
         # Resolve custom 'import:' statements
         base_dir = "/root/ansible-builder/ansible-builder/backend/playbooks"
-        resolved_yaml = resolve_yaml_imports(yaml_content, base_dir)
-
+        resolved_yaml = _resolve_yaml_imports(yaml_content, base_dir)
+        
         # YAML 파싱
         parsed_yaml = yaml.safe_load(resolved_yaml)
         
@@ -578,28 +517,19 @@ async def import_playbook_from_yaml(file: UploadFile = File(...), db: Session = 
         db.add(db_playbook)
         db.commit()
         db.refresh(db_playbook)
-
+        
         return {
             "status": "success",
             "playbook_id": db_playbook.id,
             "playbook_name": playbook_name,
             "tasks_count": len(converted_tasks),
-            "message": f"Successfully imported playbook with {len(converted_tasks)} tasks",
-            "playbook": {
-                "id": db_playbook.id,
-                "name": playbook_name,
-                "hosts": hosts,
-                "become": become,
-                "tasks": converted_tasks
-            }
+            "message": f"Successfully imported playbook with {len(converted_tasks)} tasks"
         }
         
-    except HTTPException:
-        # Re-raise HTTPException as is (from validation)
-        raise
     except yaml.YAMLError as e:
         raise HTTPException(status_code=400, detail=f"Invalid YAML format: {str(e)}")
     except Exception as e:
+        import traceback
         error_detail = f"Import failed: {str(e)}\n{traceback.format_exc()}"
         print(error_detail)
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
@@ -609,17 +539,9 @@ async def import_playbook_from_text(data: YamlTextImport, db: Session = Depends(
     """YAML 텍스트를 직접 입력하여 Playbook 자동 생성"""
     try:
         yaml_text = data.content
-
-        # YAML 구문 검사
-        validation = validate_yaml_content(yaml_text)
-        if not validation['valid']:
-            line_info = f" (line {validation['line']})" if validation['line'] else ""
-            error_msg = f"YAML syntax error{line_info}: {validation['error']}"
-            raise HTTPException(status_code=400, detail=error_msg)
-
         # Resolve custom 'import:' statements
         base_dir = "/root/ansible-builder/ansible-builder/backend/playbooks"
-        resolved_yaml = resolve_yaml_imports(yaml_text, base_dir)
+        resolved_yaml = _resolve_yaml_imports(yaml_text, base_dir)
 
         # YAML 파싱
         parsed_yaml = yaml.safe_load(resolved_yaml)
@@ -680,225 +602,20 @@ async def import_playbook_from_text(data: YamlTextImport, db: Session = Depends(
         db.add(db_playbook)
         db.commit()
         db.refresh(db_playbook)
-
+        
         return {
             "status": "success",
             "playbook_id": db_playbook.id,
             "playbook_name": playbook_name,
             "tasks_count": len(converted_tasks),
-            "message": f"Successfully imported playbook with {len(converted_tasks)} tasks",
-            "playbook": {
-                "id": db_playbook.id,
-                "name": playbook_name,
-                "hosts": hosts,
-                "become": become,
-                "tasks": converted_tasks
-            }
+            "message": f"Successfully imported playbook with {len(converted_tasks)} tasks"
         }
-
-    except HTTPException:
-        # Re-raise HTTPException as is (from validation)
-        raise
+        
     except yaml.YAMLError as e:
         raise HTTPException(status_code=400, detail=f"Invalid YAML format: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
 
-
-# ============================================
-# Syntax Validation Endpoints
-# ============================================
-
-class YamlValidationRequest(BaseModel):
-    content: str
-
-class ScriptValidationRequest(BaseModel):
-    content: str
-
-@app.post("/api/playbooks/validate-yaml")
-async def validate_yaml_syntax(data: YamlValidationRequest):
-    """YAML 문법 검사 (import 없이 검증만)"""
-    try:
-        content = data.content.strip()
-        if not content:
-            return {
-                "valid": False,
-                "error": "Empty YAML content",
-                "line": None,
-                "column": None
-            }
-        
-        # YAML 파싱 시도
-        parsed = yaml.safe_load(content)
-        
-        # Ansible Playbook 구조 검증
-        if parsed is None:
-            return {
-                "valid": False,
-                "error": "YAML content is empty or contains only comments",
-                "line": None,
-                "column": None
-            }
-        
-        # 리스트 형태의 playbook인지 확인
-        if isinstance(parsed, list):
-            if not parsed:
-                return {
-                    "valid": False,
-                    "error": "Empty playbook list",
-                    "line": None,
-                    "column": None
-                }
-            
-            # 각 play가 dict인지 확인
-            for idx, play in enumerate(parsed):
-                if not isinstance(play, dict):
-                    return {
-                        "valid": False,
-                        "error": f"Play #{idx + 1} is not a valid dictionary",
-                        "line": None,
-                        "column": None
-                    }
-                
-                # 최소한 hosts 또는 tasks가 있어야 함
-                if 'hosts' not in play and 'tasks' not in play and 'roles' not in play and 'name' not in play:
-                    return {
-                        "valid": False,
-                        "error": f"Play #{idx + 1} is missing required keys (hosts, tasks, roles, or name)",
-                        "line": None,
-                        "column": None
-                    }
-        elif isinstance(parsed, dict):
-            # 단일 play도 허용
-            if 'hosts' not in parsed and 'tasks' not in parsed and 'roles' not in parsed and 'name' not in parsed:
-                return {
-                    "valid": False,
-                    "error": "Playbook is missing required keys (hosts, tasks, roles, or name)",
-                    "line": None,
-                    "column": None
-                }
-        else:
-            return {
-                "valid": False,
-                "error": f"Invalid playbook structure. Expected list or dictionary, got {type(parsed).__name__}",
-                "line": None,
-                "column": None
-            }
-        
-        # 모든 검사 통과
-        tasks_count = 0
-        if isinstance(parsed, list):
-            for play in parsed:
-                if isinstance(play, dict):
-                    tasks_count += len(play.get('tasks', []))
-                    tasks_count += len(play.get('roles', []))
-        elif isinstance(parsed, dict):
-            tasks_count = len(parsed.get('tasks', [])) + len(parsed.get('roles', []))
-        
-        return {
-            "valid": True,
-            "message": f"Valid Ansible playbook syntax. Found {tasks_count} tasks/roles.",
-            "tasks_count": tasks_count
-        }
-        
-    except yaml.YAMLError as e:
-        # YAML 파싱 에러에서 줄 번호 추출
-        error_msg = str(e)
-        line = None
-        column = None
-        
-        if hasattr(e, 'problem_mark') and e.problem_mark:
-            line = e.problem_mark.line + 1
-            column = e.problem_mark.column + 1
-            error_msg = f"{e.problem}" if hasattr(e, 'problem') else str(e)
-        
-        return {
-            "valid": False,
-            "error": f"YAML syntax error: {error_msg}",
-            "line": line,
-            "column": column
-        }
-    except Exception as e:
-        return {
-            "valid": False,
-            "error": f"Validation failed: {str(e)}",
-            "line": None,
-            "column": None
-        }
-
-
-@app.post("/api/playbooks/validate-script")
-async def validate_script_syntax(data: ScriptValidationRequest):
-    """Shell 스크립트 문법 검사 (bash -n 사용)"""
-    try:
-        content = data.content.strip()
-        if not content:
-            return {
-                "valid": False,
-                "error": "Empty script content",
-                "line": None
-            }
-        
-        # 임시 파일에 스크립트 저장
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as f:
-            f.write(content)
-            temp_path = f.name
-        
-        try:
-            # bash -n으로 문법 검사 (실행하지 않고 검사만)
-            result = subprocess.run(
-                ['bash', '-n', temp_path],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True,
-                timeout=10
-            )
-            
-            if result.returncode == 0:
-                # 스크립트 통계 수집
-                lines = content.split('\n')
-                command_count = sum(1 for line in lines 
-                                   if line.strip() and not line.strip().startswith('#'))
-                
-                return {
-                    "valid": True,
-                    "message": f"Valid shell script syntax. Found {command_count} commands.",
-                    "command_count": command_count
-                }
-            else:
-                # 에러 메시지 파싱
-                error_output = result.stderr or result.stdout
-                line = None
-                
-                # bash 에러 메시지에서 줄 번호 추출 시도
-                # 예: "script.sh: line 5: syntax error..."
-                import re
-                line_match = re.search(r'line (\d+):', error_output)
-                if line_match:
-                    line = int(line_match.group(1))
-                
-                return {
-                    "valid": False,
-                    "error": error_output.strip() or "Unknown syntax error",
-                    "line": line
-                }
-                
-        finally:
-            # 임시 파일 삭제
-            os.unlink(temp_path)
-            
-    except subprocess.TimeoutExpired:
-        return {
-            "valid": False,
-            "error": "Script validation timed out",
-            "line": None
-        }
-    except Exception as e:
-        return {
-            "valid": False,
-            "error": f"Validation failed: {str(e)}",
-            "line": None
-        }
 
 # import script
 
@@ -908,17 +625,10 @@ async def import_script_as_playbook(file: UploadFile = File(...), db: Session = 
     try:
         content = await file.read()
         script_content = content.decode('utf-8')
-
+        
         if not script_content.strip():
             raise HTTPException(status_code=400, detail="Empty script file")
-
-        # 스크립트 구문 검사
-        validation = validate_script_content(script_content)
-        if not validation['valid']:
-            line_info = f" (line {validation['line']})" if validation['line'] else ""
-            error_msg = f"Shell script syntax error{line_info}: {validation['error']}"
-            raise HTTPException(status_code=400, detail=error_msg)
-
+        
         # 파일명에서 playbook 이름 생성
         script_name = file.filename.replace('.sh', '').replace('.bash', '').replace('.zsh', '')
         playbook_name = f"Script_{script_name}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
@@ -1082,28 +792,19 @@ async def import_script_as_playbook(file: UploadFile = File(...), db: Session = 
         db.add(db_playbook)
         db.commit()
         db.refresh(db_playbook)
-
+        
         return {
             "status": "success",
             "playbook_id": db_playbook.id,
             "playbook_name": playbook_name,
             "tasks_count": len(tasks),
-            "message": f"Successfully converted script to playbook with {len(tasks)} tasks",
-            "playbook": {
-                "id": db_playbook.id,
-                "name": playbook_name,
-                "hosts": "all",
-                "become": True,
-                "tasks": tasks
-            }
+            "message": f"Successfully converted script to playbook with {len(tasks)} tasks"
         }
         
-    except HTTPException:
-        # Re-raise HTTPException as is (from validation)
-        raise
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="Invalid file encoding. Please use UTF-8")
     except Exception as e:
+        import traceback
         error_detail = f"Import failed: {str(e)}\n{traceback.format_exc()}"
         print(error_detail)
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
@@ -1115,17 +816,10 @@ async def import_script_text_as_playbook(data: dict, db: Session = Depends(get_d
     try:
         script_text = data.get('content', '')
         playbook_name = data.get('name', f'Script_Playbook_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}')
-
+        
         if not script_text.strip():
             raise HTTPException(status_code=400, detail="Empty script content")
-
-        # 스크립트 구문 검사
-        validation = validate_script_content(script_text)
-        if not validation['valid']:
-            line_info = f" (line {validation['line']})" if validation['line'] else ""
-            error_msg = f"Shell script syntax error{line_info}: {validation['error']}"
-            raise HTTPException(status_code=400, detail=error_msg)
-
+        
         # 스크립트 분석 및 task 생성 (위와 동일한 로직)
         tasks = []
         lines = script_text.split('\n')
@@ -1261,25 +955,15 @@ async def import_script_text_as_playbook(data: dict, db: Session = Depends(get_d
         db.add(db_playbook)
         db.commit()
         db.refresh(db_playbook)
-
+        
         return {
             "status": "success",
             "playbook_id": db_playbook.id,
             "playbook_name": playbook_name,
             "tasks_count": len(tasks),
-            "message": f"Successfully converted script to playbook with {len(tasks)} tasks",
-            "playbook": {
-                "id": db_playbook.id,
-                "name": playbook_name,
-                "hosts": "all",
-                "become": True,
-                "tasks": tasks
-            }
+            "message": f"Successfully converted script to playbook with {len(tasks)} tasks"
         }
-
-    except HTTPException:
-        # Re-raise HTTPException as is (from validation)
-        raise
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
 
@@ -1505,20 +1189,16 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
     }
     
     try:
-        # AWX 인증 정보: 환경 변수 우선, request에서 제공된 값 사용 가능
-        awx_url = request.awx_url or AWX_URL
-        awx_token = request.awx_token or AWX_TOKEN
-
         async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
-            headers = {"Authorization": f"Bearer {awx_token}"}
-
+            auth = (request.awx_username, request.awx_password)
+            
             # 0. 인증 테스트
-            test_res = await client.get(f"{awx_url}/api/v2/me/", headers=headers)
+            test_res = await client.get(f"{request.awx_url}/api/v2/me/", auth=auth)
             if test_res.status_code != 200:
                 raise HTTPException(status_code=401, detail="AWX authentication failed")
             
             # 1. Organization 조회
-            orgs_res = await client.get(f"{awx_url}/api/v2/organizations/", headers=headers)
+            orgs_res = await client.get(f"{request.awx_url}/api/v2/organizations/", auth=auth)
             if orgs_res.status_code != 200:
                 raise HTTPException(status_code=400, detail="Failed to get organizations")
             
@@ -1528,8 +1208,8 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
             org_id = orgs['results'][0]['id']
             
             # 2. Project 조회
-            projects_url = f"{awx_url}/api/v2/projects/"
-            projects_res = await client.get(projects_url, headers=headers)
+            projects_url = f"{request.awx_url}/api/v2/projects/"
+            projects_res = await client.get(projects_url, auth=auth)
             if projects_res.status_code != 200:
                 raise HTTPException(status_code=400, detail="Failed to get projects")
             
@@ -1549,10 +1229,10 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
             
             # 3. Inventory 생성
             inventory_name = f"ansible_builder_{inventory_dict['id']}"
-            inventories_url = f"{awx_url}/api/v2/inventories/"
+            inventories_url = f"{request.awx_url}/api/v2/inventories/"
             
             # 기존 Inventory 확인
-            inv_check = await client.get(f"{inventories_url}?name={inventory_name}", headers=headers)
+            inv_check = await client.get(f"{inventories_url}?name={inventory_name}", auth=auth)
             if inv_check.status_code == 200 and inv_check.json().get('count', 0) > 0:
                 awx_inventory_id = inv_check.json()['results'][0]['id']
             else:
@@ -1562,13 +1242,13 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                     "description": "Auto-created by Ansible Builder",
                     "organization": org_id
                 }
-                inv_res = await client.post(inventories_url, headers=headers, json=inv_data)
+                inv_res = await client.post(inventories_url, auth=auth, json=inv_data)
                 if inv_res.status_code not in [200, 201]:
                     raise HTTPException(status_code=400, detail=f"Failed to create inventory: {inv_res.text}")
                 awx_inventory_id = inv_res.json()['id']
             
             # Host 추가 (간소화)
-            hosts_url = f"{awx_url}/api/v2/inventories/{awx_inventory_id}/hosts/"
+            hosts_url = f"{request.awx_url}/api/v2/inventories/{awx_inventory_id}/hosts/"
             for line in inventory_dict['content'].split('\n'):
                 line = line.strip()
                 if not line or line.startswith('[') or line.startswith('#'):
@@ -1596,14 +1276,14 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                 
                 # 기존 호스트 확인
                 check_url = f"{hosts_url}?name={hostname}"
-                check_res = await client.get(check_url, headers=headers)
+                check_res = await client.get(check_url, auth=auth)
                 
                 if not (check_res.status_code == 200 and check_res.json().get('count', 0) > 0):
-                    await client.post(hosts_url, headers=headers, json=host_data)
+                    await client.post(hosts_url, auth=auth, json=host_data)
             
             # 4. Credential 조회
-            creds_url = f"{awx_url}/api/v2/credentials/"
-            creds_res = await client.get(creds_url, headers=headers)
+            creds_url = f"{request.awx_url}/api/v2/credentials/"
+            creds_res = await client.get(creds_url, auth=auth)
             credential_id = None
             
             if creds_res.status_code == 200:
@@ -1617,18 +1297,18 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                     credential_id = creds['results'][0]['id']
             
             # ⭐ 5. Job Template 생성 (templates_url 정의)
-            templates_url = f"{awx_url}/api/v2/job_templates/"
+            templates_url = f"{request.awx_url}/api/v2/job_templates/"
             template_name = f"{playbook_dict['name']}_{inventory_dict['name']}"
             
             # 기존 Template 확인
-            template_check = await client.get(f"{templates_url}?name={template_name}", headers=headers)
+            template_check = await client.get(f"{templates_url}?name={template_name}", auth=auth)
             if template_check.status_code == 200 and template_check.json().get('count', 0) > 0:
                 existing = template_check.json()['results'][0]
                 return {
                     "status": "success",
                     "template_id": existing['id'],
                     "template_name": template_name,
-                    "template_url": f"{awx_url}/#/templates/job_template/{existing['id']}",
+                    "template_url": f"{request.awx_url}/#/templates/job_template/{existing['id']}",
                     "message": "Job Template already exists"
                 }
             
@@ -1656,7 +1336,7 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                 template_data["credentials"] = [credential_id]
             
             # Template 생성 요청
-            template_res = await client.post(templates_url, headers=headers, json=template_data)
+            template_res = await client.post(templates_url, auth=auth, json=template_data)
             if template_res.status_code not in [200, 201]:
                 raise HTTPException(status_code=400, detail=f"Failed to create job template: {template_res.text}")
             
@@ -1666,7 +1346,7 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                 "status": "success",
                 "template_id": template_result['id'],
                 "template_name": template_name,
-                "template_url": f"{awx_url}/#/templates/job_template/{template_result['id']}",
+                "template_url": f"{request.awx_url}/#/templates/job_template/{template_result['id']}",
                 "project_id": project_id,
                 "inventory_id": awx_inventory_id,
                 "credential_id": credential_id,
@@ -1676,6 +1356,7 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
         error_detail = f"Error: {str(e)}\n{traceback.format_exc()}"
         print(error_detail)
         raise HTTPException(status_code=500, detail=error_detail)
@@ -1712,18 +1393,18 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
     
     try:
         async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
-            headers = {"Authorization": f"Bearer {request.awx_token or AWX_TOKEN}"}
+            auth = (request.awx_username, request.awx_password)
             
             # 0. 인증 테스트
             try:
-                test_res = await client.get(f"{awx_url}/api/v2/me/", headers=headers)
+                test_res = await client.get(f"{request.awx_url}/api/v2/me/", auth=auth)
                 if test_res.status_code != 200:
                     raise HTTPException(status_code=401, detail=f"AWX authentication failed: {test_res.text}")
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Cannot connect to AWX: {str(e)}")
             
             # 1. Organization 조회
-            orgs_res = await client.get(f"{awx_url}/api/v2/organizations/", headers=headers)
+            orgs_res = await client.get(f"{request.awx_url}/api/v2/organizations/", auth=auth)
             if orgs_res.status_code != 200:
                 raise HTTPException(status_code=400, detail=f"Failed to get organizations: {orgs_res.text}")
             orgs = orgs_res.json()
@@ -1732,8 +1413,8 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
             org_id = orgs['results'][0]['id']
             
             # 2. 기존 Project 중 하나 사용 (Demo Project 우선)
-            projects_url = f"{awx_url}/api/v2/projects/"
-            projects_res = await client.get(projects_url, headers=headers)
+            projects_url = f"{request.awx_url}/api/v2/projects/"
+            projects_res = await client.get(projects_url, auth=auth)
             if projects_res.status_code != 200:
                 raise HTTPException(status_code=400, detail="Failed to get projects")
             
@@ -1747,8 +1428,8 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
             for proj in projects['results']:
                 if 'demo' in proj['name'].lower() or 'example' in proj['name'].lower():
                     project_id = proj['id']
-                    playbooks_url = f"{awx_url}/api/v2/projects/{project_id}/playbooks/"
-                    pb_res = await client.get(playbooks_url, headers=headers)
+                    playbooks_url = f"{request.awx_url}/api/v2/projects/{project_id}/playbooks/"
+                    pb_res = await client.get(playbooks_url, auth=auth)
                     if pb_res.status_code == 200:
                         pbs = pb_res.json()
                         if pbs:
@@ -1757,8 +1438,8 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
             
             if not project_id:
                 project_id = projects['results'][0]['id']
-                playbooks_url = f"{awx_url}/api/v2/projects/{project_id}/playbooks/"
-                pb_res = await client.get(playbooks_url, headers=headers)
+                playbooks_url = f"{request.awx_url}/api/v2/projects/{project_id}/playbooks/"
+                pb_res = await client.get(playbooks_url, auth=auth)
                 if pb_res.status_code == 200:
                     pbs = pb_res.json()
                     if pbs:
@@ -1769,18 +1450,18 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
             
             # 3. Inventory 생성
             inventory_name = f"ansible_builder_{inventory_dict['id']}"
-            inventories_url = f"{awx_url}/api/v2/inventories/"
+            inventories_url = f"{request.awx_url}/api/v2/inventories/"
             
             # 기존 Inventory 확인
-            inv_check = await client.get(f"{inventories_url}?name={inventory_name}", headers=headers)
+            inv_check = await client.get(f"{inventories_url}?name={inventory_name}", auth=auth)
             if inv_check.status_code == 200 and inv_check.json().get('count', 0) > 0:
                 awx_inventory_id = inv_check.json()['results'][0]['id']
                 # 기존 Inventory의 Host 삭제 후 재생성
-                hosts_list_url = f"{awx_url}/api/v2/inventories/{awx_inventory_id}/hosts/"
-                existing_hosts = await client.get(hosts_list_url, headers=headers)
+                hosts_list_url = f"{request.awx_url}/api/v2/inventories/{awx_inventory_id}/hosts/"
+                existing_hosts = await client.get(hosts_list_url, auth=auth)
                 if existing_hosts.status_code == 200:
                     for host in existing_hosts.json().get('results', []):
-                        await client.delete(f"{awx_url}/api/v2/hosts/{host['id']}/", headers=headers)
+                        await client.delete(f"{request.awx_url}/api/v2/hosts/{host['id']}/", auth=auth)
             else:
                 # 새 Inventory 생성
                 inv_data = {
@@ -1788,14 +1469,14 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                     "description": f"Auto-created by Ansible Builder",
                     "organization": org_id
                 }
-                inv_res = await client.post(inventories_url, headers=headers, json=inv_data)
+                inv_res = await client.post(inventories_url, auth=auth, json=inv_data)
                 if inv_res.status_code not in [200, 201]:
                     raise HTTPException(status_code=400, detail=f"Failed to create inventory: {inv_res.text}")
                 awx_inventory_id = inv_res.json()['id']
             
             # Host 추가 - 철저한 변수 필터링 및 그룹 할당
-            hosts_url = f"{awx_url}/api/v2/inventories/{awx_inventory_id}/hosts/"
-            groups_url = f"{awx_url}/api/v2/inventories/{awx_inventory_id}/groups/"
+            hosts_url = f"{request.awx_url}/api/v2/inventories/{awx_inventory_id}/hosts/"
+            groups_url = f"{request.awx_url}/api/v2/inventories/{awx_inventory_id}/groups/"
             
             current_group = None
             current_group_id = None
@@ -1836,7 +1517,7 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                         elif current_group not in created_groups:
                             try:
                                 # 기존 그룹 확인
-                                check_group = await client.get(f"{groups_url}?name={current_group}", headers=headers)
+                                check_group = await client.get(f"{groups_url}?name={current_group}", auth=auth)
                                 if check_group.status_code == 200 and check_group.json().get('count', 0) > 0:
                                     current_group_id = check_group.json()['results'][0]['id']
                                     created_groups[current_group] = current_group_id
@@ -1848,7 +1529,7 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                                         "description": f"Auto-created from inventory",
                                         "inventory": awx_inventory_id
                                     }
-                                    group_res = await client.post(groups_url, headers=headers, json=group_data)
+                                    group_res = await client.post(groups_url, auth=auth, json=group_data)
                                     if group_res.status_code in [200, 201]:
                                         current_group_id = group_res.json()['id']
                                         created_groups[current_group] = current_group_id
@@ -1923,7 +1604,7 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                 try:
                     # 기존 호스트 체크
                     check_url = f"{hosts_url}?name={hostname}"
-                    check_res = await client.get(check_url, headers=headers)
+                    check_res = await client.get(check_url, auth=auth)
                     
                     host_id = None
                     if check_res.status_code == 200 and check_res.json().get('count', 0) > 0:
@@ -1932,7 +1613,7 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                         added_hosts.add(hostname)
                     else:
                         # 새 호스트 추가
-                        host_res = await client.post(hosts_url, headers=headers, json=host_data)
+                        host_res = await client.post(hosts_url, auth=auth, json=host_data)
                         if host_res.status_code in [200, 201]:
                             host_id = host_res.json()['id']
                             added_hosts.add(hostname)
@@ -1942,9 +1623,9 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                     
                     # 호스트를 그룹에 추가
                     if host_id and current_group_id:
-                        associate_url = f"{awx_url}/api/v2/groups/{current_group_id}/hosts/"
+                        associate_url = f"{request.awx_url}/api/v2/groups/{current_group_id}/hosts/"
                         associate_data = {"id": host_id}
-                        associate_res = await client.post(associate_url, headers=headers, json=associate_data)
+                        associate_res = await client.post(associate_url, auth=auth, json=associate_data)
                         if associate_res.status_code in [200, 201, 204]:
                             print(f"✅ Added {hostname} to group {current_group}")
                         else:
@@ -1955,22 +1636,21 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                     print(f"⚠️ Error processing {hostname}: {str(e)}")
             
             # 4. Credential 조회
-            # gaia_bot 이름을 포함하는 credential 검색 (API 필터링 사용)
-            creds_url = f"{awx_url}/api/v2/credentials/?name__icontains=gaia_bot"
-            creds_res = await client.get(creds_url, headers=headers)
+            creds_url = f"{request.awx_url}/api/v2/credentials/"
+            creds_res = await client.get(creds_url, auth=auth)
             credential_id = None
             
             if creds_res.status_code == 200:
                 creds = creds_res.json()
-                if creds.get('results'):
-                    # 첫 번째 매칭되는 결과 사용
-                    cred = creds['results'][0]
-                    credential_id = cred['id']
-                    print(f"Found gaia_bot credential: {cred['name']} (ID: {credential_id})")
+                for cred in creds.get('results', []):
+                    if 'gaia_bot' in cred.get('name', '').lower():
+                        credential_id = cred['id']
+                        print(f"Found gaia_bot credential: {cred['name']} (ID: {credential_id})")
+                        break
                 
                 if not credential_id:
-                    machine_creds_url = f"{awx_url}/api/v2/credentials/?credential_type=1"
-                    machine_creds_res = await client.get(machine_creds_url, headers=headers)
+                    machine_creds_url = f"{request.awx_url}/api/v2/credentials/?credential_type=1"
+                    machine_creds_res = await client.get(machine_creds_url, auth=auth)
                     if machine_creds_res.status_code == 200:
                         machine_creds = machine_creds_res.json()
                         if machine_creds.get('results'):
@@ -1978,7 +1658,7 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                             print(f"Using fallback credential: {machine_creds['results'][0]['name']} (ID: {credential_id})")
             
             # Job Template 생성
-                template_res = await client.post(templates_url, headers=headers, json=template_data)
+                template_res = await client.post(templates_url, auth=auth, json=template_data)
                 if template_res.status_code not in [200, 201]:
                     raise HTTPException(status_code=400, detail=f"Failed to create job template: {template_res.text}")
 
@@ -2022,8 +1702,8 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
         ]
     }
     
-            survey_url = f"{awx_url}/api/v2/job_templates/{template_id}/survey_spec/"
-            survey_res = await client.post(survey_url, headers=headers, json=survey_spec)
+            survey_url = f"{request.awx_url}/api/v2/job_templates/{template_id}/survey_spec/"
+            survey_res = await client.post(survey_url, auth=auth, json=survey_spec)
 
             if survey_res.status_code not in [200, 201]:
                 print(f"⚠️ Survey creation failed: {survey_res.text}")
@@ -2032,7 +1712,7 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                 "status": "success",
                 "template_id": template_id,
                 "template_name": template_name,
-                "template_url": f"{awx_url}/#/templates/job_template/{template_id}",
+                "template_url": f"{request.awx_url}/#/templates/job_template/{template_id}",
                 "message": "Job Template created with survey"
             }
 
@@ -2040,17 +1720,17 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
 
             # 5. Job Template 생성
             template_name = f"{playbook_dict['name']}_{inventory_dict['name']}"
-            templates_url = f"{awx_url}/api/v2/job_templates/"
+            templates_url = f"{request.awx_url}/api/v2/job_templates/"
             
             # 기존 Template 확인
-            template_check = await client.get(f"{templates_url}?name={template_name}", headers=headers)
+            template_check = await client.get(f"{templates_url}?name={template_name}", auth=auth)
             if template_check.status_code == 200 and template_check.json().get('count', 0) > 0:
                 existing = template_check.json()['results'][0]
                 return {
                     "status": "success",
                     "template_id": existing['id'],
                     "template_name": template_name,
-                    "template_url": f"{awx_url}/#/templates/job_template/{existing['id']}",
+                    "template_url": f"{request.awx_url}/#/templates/job_template/{existing['id']}",
                     "message": f"Job Template '{template_name}' already exists"
                 }
             
@@ -2079,7 +1759,7 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
             if credential_id:
                 template_data["credentials"] = [credential_id]
             
-            template_res = await client.post(templates_url, headers=headers, json=template_data)
+            template_res = await client.post(templates_url, auth=auth, json=template_data)
             if template_res.status_code not in [200, 201]:
                 raise HTTPException(status_code=400, detail=f"Failed to create job template: {template_res.text}")
             
@@ -2089,10 +1769,10 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                 "status": "success",
                 "template_id": template_result['id'],
                 "template_name": template_name,
-                "template_url": f"{awx_url}/#/templates/job_template/{template_result['id']}",
+                "template_url": f"{request.awx_url}/#/templates/job_template/{template_result['id']}",
                 "project_id": project_id,
                 "inventory_id": awx_inventory_id,
-                "inventory_url": f"{awx_url}/#/inventories/inventory/{awx_inventory_id}/hosts",
+                "inventory_url": f"{request.awx_url}/#/inventories/inventory/{awx_inventory_id}/hosts",
                 "credential_id": credential_id,
                 "message": f"Job Template '{template_name}' created successfully"
             }
@@ -2102,6 +1782,7 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
     except httpx.RequestError as e:
         raise HTTPException(status_code=500, detail=f"Network error: {str(e)}")
     except Exception as e:
+        import traceback
         error_detail = f"Error: {str(e)}\n{traceback.format_exc()}"
         print(error_detail)
         raise HTTPException(status_code=500, detail=error_detail)
@@ -2110,33 +1791,29 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
 @app.post("/api/awx/launch")
 async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
     """AWX Job 실행 - extra_vars 직접 전달"""
-
+    
     playbook = db.query(AnsibleBuilderPlaybook).filter(
         AnsibleBuilderPlaybook.id == request.playbook_id
     ).first()
     if not playbook:
         raise HTTPException(status_code=404, detail="Playbook not found")
-
+    
     playbook_dict = {
         "name": playbook.name,
         "hosts": playbook.hosts,
         "become": playbook.become,
         "tasks": json.loads(playbook.tasks)
     }
-
+    
     try:
-        # AWX 인증 정보: 환경 변수 우선, request에서 제공된 값 사용 가능
-        awx_url = request.awx_url or AWX_URL
-        awx_token = request.awx_token or AWX_TOKEN
-
         async with httpx.AsyncClient(verify=False, timeout=60.0) as client:
-            headers = {"Authorization": f"Bearer {awx_token}"}
+            auth = (request.awx_username, request.awx_password)
             
             if not request.job_template_id:
                 raise HTTPException(status_code=400, detail="Job Template ID required")
             
             # ⭐ Launch URL
-            launch_url = f"{awx_url}/api/v2/job_templates/{request.job_template_id}/launch/"
+            launch_url = f"{request.awx_url}/api/v2/job_templates/{request.job_template_id}/launch/"
             
             # ⭐ extra_vars 준비
             extra_vars = {
@@ -2154,7 +1831,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
             print(f"🚀 Launching job with payload:")
             print(json.dumps(launch_payload, indent=2))
             
-            response = await client.post(launch_url, headers=headers, json=launch_payload)
+            response = await client.post(launch_url, auth=auth, json=launch_payload)
             
             if response.status_code not in [200, 201]:
                 raise HTTPException(
@@ -2168,7 +1845,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
             return {
                 "status": "success",
                 "awx_job_id": job_id,
-                "awx_job_url": f"{awx_url}/#/jobs/playbook/{job_id}/output",
+                "awx_job_url": f"{request.awx_url}/#/jobs/playbook/{job_id}",
                 "playbook_name": playbook_dict['name'],
                 "tasks_count": len(playbook_dict['tasks']),
                 "message": f"Executing {len(playbook_dict['tasks'])} tasks"
@@ -2177,6 +1854,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
     """AWX Job 실행 - Template 업데이트 후 Launch"""
@@ -2196,12 +1874,12 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
     
     try:
         async with httpx.AsyncClient(verify=False, timeout=60.0) as client:
-            headers = {"Authorization": f"Bearer {request.awx_token or AWX_TOKEN}"}
+            auth = (request.awx_username, request.awx_password)
             
             if not request.job_template_id:
                 raise HTTPException(status_code=400, detail="Job Template ID required")
             
-            template_url = f"{awx_url}/api/v2/job_templates/{request.job_template_id}/"
+            template_url = f"{request.awx_url}/api/v2/job_templates/{request.job_template_id}/"
             
             # STEP 1: Template extra_vars 업데이트
             extra_vars_data = {
@@ -2215,15 +1893,15 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
                 "extra_vars": json.dumps(extra_vars_data)
             }
             
-            update_res = await client.patch(template_url, headers=headers, json=update_payload)
+            update_res = await client.patch(template_url, auth=auth, json=update_payload)
             
             if update_res.status_code not in [200, 201]:
                 print(f"⚠️ Template update warning: {update_res.text}")
             
             # STEP 2: Launch Job
-            launch_url = f"{awx_url}/api/v2/job_templates/{request.job_template_id}/launch/"
+            launch_url = f"{request.awx_url}/api/v2/job_templates/{request.job_template_id}/launch/"
             
-            response = await client.post(launch_url, headers=headers, json={})
+            response = await client.post(launch_url, auth=auth, json={})
             
             if response.status_code not in [200, 201]:
                 raise HTTPException(
@@ -2237,7 +1915,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
             return {
                 "status": "success",
                 "awx_job_id": job_id,
-                "awx_job_url": f"{awx_url}/#/jobs/playbook/{job_id}/output",
+                "awx_job_url": f"{request.awx_url}/#/jobs/playbook/{job_id}",
                 "tasks_count": len(playbook_dict['tasks']),
                 "message": f"Executing {len(playbook_dict['tasks'])} tasks"
             }
@@ -2245,6 +1923,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
     """AWX Job 실행 - Template 수정 후 Launch"""
@@ -2264,12 +1943,12 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
     
     try:
         async with httpx.AsyncClient(verify=False, timeout=60.0) as client:
-            headers = {"Authorization": f"Bearer {request.awx_token or AWX_TOKEN}"}
+            auth = (request.awx_username, request.awx_password)
             
             if not request.job_template_id:
                 raise HTTPException(status_code=400, detail="Job Template ID required")
             
-            template_url = f"{awx_url}/api/v2/job_templates/{request.job_template_id}/"
+            template_url = f"{request.awx_url}/api/v2/job_templates/{request.job_template_id}/"
             
             # ⭐ STEP 1: Template의 extra_vars 업데이트
             extra_vars_data = {
@@ -2285,7 +1964,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
             
             print(f"📝 Updating template with extra_vars:\n{json.dumps(extra_vars_data, indent=2)}")
             
-            update_res = await client.patch(template_url, headers=headers, json=update_payload)
+            update_res = await client.patch(template_url, auth=auth, json=update_payload)
             
             if update_res.status_code not in [200, 201]:
                 print(f"⚠️ Template update failed: {update_res.text}")
@@ -2293,12 +1972,12 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
                 print(f"✅ Template updated successfully")
             
             # ⭐ STEP 2: Launch Job (extra_vars는 이미 Template에 저장됨)
-            launch_url = f"{awx_url}/api/v2/job_templates/{request.job_template_id}/launch/"
+            launch_url = f"{request.awx_url}/api/v2/job_templates/{request.job_template_id}/launch/"
             
             # 빈 payload로 launch (Template의 extra_vars 사용)
             launch_payload = {}
             
-            response = await client.post(launch_url, headers=headers, json=launch_payload)
+            response = await client.post(launch_url, auth=auth, json=launch_payload)
             
             if response.status_code not in [200, 201]:
                 raise HTTPException(
@@ -2311,8 +1990,8 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
             
             # Job 상세 확인
             await asyncio.sleep(1)
-            job_detail_url = f"{awx_url}/api/v2/jobs/{job_id}/"
-            job_detail_res = await client.get(job_detail_url, headers=headers)
+            job_detail_url = f"{request.awx_url}/api/v2/jobs/{job_id}/"
+            job_detail_res = await client.get(job_detail_url, auth=auth)
             
             actual_vars = "unknown"
             if job_detail_res.status_code == 200:
@@ -2323,7 +2002,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
             return {
                 "status": "success",
                 "awx_job_id": job_id,
-                "awx_job_url": f"{awx_url}/#/jobs/playbook/{job_id}/output",
+                "awx_job_url": f"{request.awx_url}/#/jobs/playbook/{job_id}",
                 "extra_vars_set": json.dumps(extra_vars_data, indent=2),
                 "extra_vars_actual": actual_vars,
                 "message": "Job launched successfully"
@@ -2332,6 +2011,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
         error_detail = f"Error: {str(e)}\n{traceback.format_exc()}"
         print(error_detail)
         raise HTTPException(status_code=500, detail=error_detail)
@@ -2352,14 +2032,14 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
     
     try:
         async with httpx.AsyncClient(verify=False, timeout=60.0) as client:
-            headers = {"Authorization": f"Bearer {request.awx_token or AWX_TOKEN}"}
+            auth = (request.awx_username, request.awx_password)
             
             if not request.job_template_id:
                 raise HTTPException(status_code=400, detail="Job Template ID required")
             
             # ⭐ Launch 전에 Template의 extra_vars 확인
-            template_url = f"{awx_url}/api/v2/job_templates/{request.job_template_id}/"
-            template_res = await client.get(template_url, headers=headers)
+            template_url = f"{request.awx_url}/api/v2/job_templates/{request.job_template_id}/"
+            template_res = await client.get(template_url, auth=auth)
             
             if template_res.status_code != 200:
                 raise HTTPException(status_code=404, detail="Template not found")
@@ -2378,7 +2058,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
                 "builder_tasks": playbook_dict['tasks']
             }
             
-            launch_url = f"{awx_url}/api/v2/job_templates/{request.job_template_id}/launch/"
+            launch_url = f"{request.awx_url}/api/v2/job_templates/{request.job_template_id}/launch/"
             
             # ⭐ AWX API 형식: extra_vars는 JSON 문자열
             job_data = {
@@ -2387,7 +2067,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
             
             print(f"🚀 Launching with extra_vars:\n{json.dumps(new_extra_vars, indent=2)}")
             
-            response = await client.post(launch_url, headers=headers, json=job_data)
+            response = await client.post(launch_url, auth=auth, json=job_data)
             
             if response.status_code not in [200, 201]:
                 raise HTTPException(
@@ -2400,8 +2080,8 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
             
             # ⭐ Job 상세 조회로 실제 적용된 extra_vars 확인
             await asyncio.sleep(1)  # Job이 생성될 시간 대기
-            job_detail_url = f"{awx_url}/api/v2/jobs/{job_id}/"
-            job_detail_res = await client.get(job_detail_url, headers=headers)
+            job_detail_url = f"{request.awx_url}/api/v2/jobs/{job_id}/"
+            job_detail_res = await client.get(job_detail_url, auth=auth)
             
             actual_vars = "unknown"
             if job_detail_res.status_code == 200:
@@ -2412,7 +2092,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
             return {
                 "status": "success",
                 "awx_job_id": job_id,
-                "awx_job_url": f"{awx_url}/#/jobs/playbook/{job_id}/output",
+                "awx_job_url": f"{request.awx_url}/#/jobs/playbook/{job_id}",
                 "extra_vars_sent": json.dumps(new_extra_vars, indent=2),
                 "extra_vars_actual": actual_vars,
                 "message": "Job launched successfully"
@@ -2421,6 +2101,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
         error_detail = f"Error: {str(e)}\n{traceback.format_exc()}"
         print(error_detail)
         raise HTTPException(status_code=500, detail=error_detail)
@@ -2441,7 +2122,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
     
     try:
         async with httpx.AsyncClient(verify=False, timeout=60.0) as client:
-            headers = {"Authorization": f"Bearer {request.awx_token or AWX_TOKEN}"}
+            auth = (request.awx_username, request.awx_password)
             
             if not request.job_template_id:
                 raise HTTPException(status_code=400, detail="Job Template ID required")
@@ -2454,7 +2135,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
                 "builder_tasks": playbook_dict['tasks']
             })
             
-            launch_url = f"{awx_url}/api/v2/job_templates/{request.job_template_id}/launch/"
+            launch_url = f"{request.awx_url}/api/v2/job_templates/{request.job_template_id}/launch/"
             
             # ⭐ AWX API 형식: extra_vars는 문자열
             job_data = {
@@ -2463,7 +2144,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
             
             print(f"🚀 Launching job with data: {json.dumps(job_data, indent=2)}")
             
-            response = await client.post(launch_url, headers=headers, json=job_data)
+            response = await client.post(launch_url, auth=auth, json=job_data)
             
             if response.status_code not in [200, 201]:
                 raise HTTPException(
@@ -2475,39 +2156,33 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
             job_id = job_result.get("id")
             
             # ⭐ Job 상세 조회로 extra_vars 확인
-            job_detail_url = f"{awx_url}/api/v2/jobs/{job_id}/"
-            job_detail = await client.get(job_detail_url, headers=headers)
+            job_detail_url = f"{request.awx_url}/api/v2/jobs/{job_id}/"
+            job_detail = await client.get(job_detail_url, auth=auth)
             
             actual_extra_vars = job_detail.json().get("extra_vars", "{}") if job_detail.status_code == 200 else "unknown"
             
             return {
                 "status": "success",
                 "awx_job_id": job_id,
-                "awx_job_url": f"{awx_url}/#/jobs/playbook/{job_id}/output",
+                "awx_job_url": f"{request.awx_url}/#/jobs/playbook/{job_id}",
                 "extra_vars_sent": extra_vars_str,
                 "extra_vars_received": actual_extra_vars,
                 "message": "Job launched"
             }
             
     except Exception as e:
+        import traceback
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/awx/templates")
-async def get_awx_templates(
-    awx_url: Optional[str] = None,
-    awx_token: Optional[str] = None
-):
+async def get_awx_templates(awx_url: str, awx_username: str, awx_password: str):
     """AWX Job Templates 목록 조회"""
-    # 환경 변수에서 AWX 인증 정보 가져오기
-    awx_url = awx_url or AWX_URL
-    awx_token = awx_token or AWX_TOKEN
-
     try:
         async with httpx.AsyncClient(verify=False) as client:
-            headers = {"Authorization": f"Bearer {awx_token}"}
+            auth = (awx_username, awx_password)
             url = f"{awx_url}/api/v2/job_templates/"
-            response = await client.get(url, headers=headers)
+            response = await client.get(url, auth=auth)
             
             if response.status_code != 200:
                 raise HTTPException(status_code=400, detail="Failed to fetch templates from AWX")
@@ -2693,12 +2368,10 @@ async def import_inventory_from_csv(file: UploadFile = File(...), db: Session = 
             "message": f"Successfully imported {total_hosts} hosts in {len(groups)} groups"
         }
         
-    except HTTPException:
-        # Re-raise HTTPException as is (from validation)
-        raise
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="Invalid file encoding. Please use UTF-8")
     except Exception as e:
+        import traceback
         error_detail = f"Import failed: {str(e)}\n{traceback.format_exc()}"
         print(error_detail)
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
@@ -2723,19 +2396,19 @@ EXECUTOR_PLAYBOOK_CONTENT = """---
         var: hostvars[inventory_hostname]
 """
 
-async def ensure_executor_playbook_exists(awx_url: str, awx_token: str, project_id: int) -> tuple:
+async def ensure_executor_playbook_exists(awx_url: str, awx_username: str, awx_password: str, project_id: int) -> tuple:
     """AWX Project에 executor playbook이 있는지 확인하고 없으면 생성 안내"""
     
     executor_filename = "ansible_builder_executor.yml"
-
+    
     async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
-        headers = {"Authorization": f"Bearer {awx_token}"}
-
+        auth = (awx_username, awx_password)
+        
         # Project의 playbook 목록 조회
         playbooks_url = f"{awx_url}/api/v2/projects/{project_id}/playbooks/"
         
         try:
-            pb_res = await client.get(playbooks_url, headers=headers)
+            pb_res = await client.get(playbooks_url, auth=auth)
             if pb_res.status_code == 200:
                 playbooks = pb_res.json()
                 
@@ -2748,7 +2421,7 @@ async def ensure_executor_playbook_exists(awx_url: str, awx_token: str, project_
                     print(f"Available playbooks: {playbooks}")
                     
                     # Project 정보 조회
-                    proj_res = await client.get(f"{awx_url}/api/v2/projects/{project_id}/", headers=headers)
+                    proj_res = await client.get(f"{awx_url}/api/v2/projects/{project_id}/", auth=auth)
                     if proj_res.status_code == 200:
                         project_info = proj_res.json()
                         project_name = project_info.get('name', 'Unknown')
@@ -2785,78 +2458,29 @@ async def ensure_executor_playbook_exists(awx_url: str, awx_token: str, project_
     return (False, None, "Unable to verify executor playbook")
 
 
-@app.get("/api/awx/config")
-async def get_awx_config():
-    """기본 AWX 설정 반환"""
-    return {
-        "url": AWX_URL
-    }
-
 @app.get("/api/awx/check-executor")
-async def check_awx_executor(
-    project_id: Optional[int] = None,
-    awx_url: Optional[str] = None,
-    awx_token: Optional[str] = None
-):
+async def check_awx_executor(awx_url: str, awx_username: str, awx_password: str, project_id: int):
     """Executor playbook 존재 여부 확인"""
-    # 환경 변수에서 AWX 인증 정보 가져오기
-    awx_url = awx_url or AWX_URL
-    awx_token = awx_token or AWX_TOKEN
-    
     try:
-        # project_id가 없으면 자동으로 찾기 (Demo Project 우선)
-        if not project_id:
-            async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
-                headers = {"Authorization": f"Bearer {awx_token}"}
-                projects_res = await client.get(f"{awx_url}/api/v2/projects/", headers=headers)
-                
-                if projects_res.status_code == 200:
-                    projects = projects_res.json().get('results', [])
-                    
-                    # 1. 'demo'가 포함된 프로젝트 찾기
-                    for proj in projects:
-                        if 'demo' in proj['name'].lower():
-                            project_id = proj['id']
-                            break
-                    
-                    # 2. 없으면 첫 번째 프로젝트 사용
-                    if not project_id and projects:
-                        project_id = projects[0]['id']
-                
-                if not project_id:
-                     return {
-                        "status": "setup_required",
-                        "executor_playbook": None,
-                        "instructions": "No AWX Project found. Please create a Project in AWX first.",
-                        "playbook_content": EXECUTOR_PLAYBOOK_CONTENT
-                    }
-
         exists, filename, instructions = await ensure_executor_playbook_exists(
-            awx_url, awx_token, project_id
+            awx_url, awx_username, awx_password, project_id
         )
         
         if exists:
             return {
                 "status": "ready",
                 "executor_playbook": filename,
-                "project_id": project_id,
                 "message": "Executor playbook is available"
             }
         else:
             return {
                 "status": "setup_required",
                 "executor_playbook": None,
-                "project_id": project_id,
                 "instructions": instructions,
                 "playbook_content": EXECUTOR_PLAYBOOK_CONTENT
             }
     except Exception as e:
-        print(f"Error in check_awx_executor: {str(e)}")
-        # 500 에러 대신 200 OK로 에러 메시지 반환하여 프론트엔드 처리 용이하게
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==================== 인증 관련 엔드포인트 ====================
 
@@ -2921,152 +2545,6 @@ async def delete_user(
     log_action(db, current_user, "DELETE", "user", user_id, f"Deleted user: {username}")
 
     return {"message": f"User {username} deleted successfully"}
-
-# ==================== AWX OIDC Redirect ====================
-
-@app.get("/api/awx/oidc-redirect")
-async def awx_oidc_redirect(job_url: str):
-    """
-    AWX OIDC 인증을 통한 Job 페이지 리디렉션
-
-    사용자를 AWX OIDC 로그인으로 리디렉션한 후 Job 페이지로 이동
-    """
-    from fastapi.responses import HTMLResponse
-
-    # AWX URL과 Job 경로 추출
-    # job_url 형식: http://192.168.64.26:30000/#/jobs/playbook/123
-    awx_base_url = AWX_URL  # http://192.168.64.26:30000
-
-    # Job URL에서 해시 경로 추출
-    if '#' in job_url:
-        job_path = job_url.split('#')[1]  # /jobs/playbook/123
-    else:
-        job_path = '/home'  # 기본값
-
-    # OIDC 로그인 후 Job 페이지로 리디렉션하는 HTML 페이지 생성
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>AWX 로그인 중...</title>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                margin: 0;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-            }}
-            .container {{
-                text-align: center;
-                background: rgba(255, 255, 255, 0.1);
-                padding: 40px;
-                border-radius: 10px;
-                backdrop-filter: blur(10px);
-            }}
-            .spinner {{
-                border: 5px solid rgba(255, 255, 255, 0.3);
-                border-top: 5px solid white;
-                border-radius: 50%;
-                width: 50px;
-                height: 50px;
-                animation: spin 1s linear infinite;
-                margin: 20px auto;
-            }}
-            @keyframes spin {{
-                0% {{ transform: rotate(0deg); }}
-                100% {{ transform: rotate(360deg); }}
-            }}
-            h1 {{ margin: 0 0 20px 0; }}
-            p {{ margin: 10px 0; opacity: 0.9; }}
-        </style>
-    </head>
-    <body>
-        <div class="container" id="loading">
-            <h1>🔐 AWX 로그인 확인 중...</h1>
-            <div class="spinner"></div>
-            <p>AWX 인증 상태를 확인하고 있습니다.</p>
-            <p>잠시만 기다려주세요...</p>
-        </div>
-        <div class="container" id="redirect-info" style="display:none;">
-            <h1>✅ Job이 실행되었습니다!</h1>
-            <p style="margin: 20px 0;">AWX에서 Job을 확인하려면:</p>
-            <ol style="text-align: left; display: inline-block; margin: 20px auto;">
-                <li>AWX에 OIDC로 로그인하세요</li>
-                <li>로그인 후 아래 링크를 클릭하세요</li>
-            </ol>
-            <p style="margin-top: 30px;">
-                <a href="#" id="job-link" style="
-                    display: inline-block;
-                    background: white;
-                    color: #667eea;
-                    padding: 15px 30px;
-                    text-decoration: none;
-                    border-radius: 5px;
-                    font-weight: bold;
-                    margin-top: 10px;
-                ">Job 페이지로 이동</a>
-            </p>
-            <p style="margin-top: 20px; font-size: 0.9em; opacity: 0.8;">
-                또는 AWX에 이미 로그인되어 있다면 자동으로 리디렉션됩니다...
-            </p>
-        </div>
-
-        <script>
-            // AWX OIDC 로그인 페이지로 리디렉션
-            const awxUrl = '{awx_base_url}';
-            const jobPath = '{job_path}';
-            const fullJobUrl = awxUrl + jobPath;
-
-            // Job 링크 설정
-            document.getElementById('job-link').href = fullJobUrl;
-
-            // 1. 먼저 AWX API에 접근 가능한지 확인
-            fetch(awxUrl + '/api/v2/me/', {{
-                credentials: 'include',
-                mode: 'cors'
-            }})
-            .then(response => {{
-                if (response.ok) {{
-                    // 이미 로그인됨 - 직접 Job 페이지로 이동
-                    console.log('Already logged in, redirecting to job page');
-                    setTimeout(() => {{
-                        window.location.href = fullJobUrl;
-                    }}, 1500);
-                }} else {{
-                    // 로그인 안 됨 - 사용자에게 안내 표시
-                    console.log('Not logged in, showing instructions');
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('redirect-info').style.display = 'block';
-
-                    // Job 링크 클릭 시 새 탭에서 AWX 열기
-                    document.getElementById('job-link').onclick = function(e) {{
-                        e.preventDefault();
-                        window.open(fullJobUrl, '_blank');
-                    }};
-                }}
-            }})
-            .catch(error => {{
-                // CORS 에러 또는 연결 실패 - 안내 표시
-                console.log('Error checking auth, showing instructions');
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('redirect-info').style.display = 'block';
-
-                // Job 링크 클릭 시 새 탭에서 AWX 열기
-                document.getElementById('job-link').onclick = function(e) {{
-                    e.preventDefault();
-                    window.open(fullJobUrl, '_blank');
-                }};
-            }});
-        </script>
-    </body>
-    </html>
-    """
-
-    return HTMLResponse(content=html_content)
 
 # ==================== Frontend Static Files ====================
 

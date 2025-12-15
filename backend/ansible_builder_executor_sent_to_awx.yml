@@ -1,0 +1,28 @@
+---
+- name: Ansible Builder Executor
+  hosts: "{{ target_hosts | default('all') }}"
+  gather_facts: "{{ gather_facts_enabled | default('yes') }}"
+  become: "{{ become_required | default(false) }}"
+
+  tasks:
+    - name: Display Execution Info
+      ansible.builtin.debug:
+        msg: 
+          - "Playbook Name: {{ builder_playbook_name | default('Unknown') }}"
+          - "Target Hosts: {{ target_hosts | default('all') }}"
+          - "Become: {{ become_required | default(false) }}"
+      run_once: yes
+
+    - name: Create temporary task file on control node
+      ansible.builtin.copy:
+        content: "{{ builder_tasks | to_nice_yaml }}"
+        dest: "/tmp/builder_dynamic_tasks.yml"
+        mode: '0600'
+      delegate_to: localhost
+      run_once: yes
+      when: builder_tasks is defined and builder_tasks | length > 0
+
+    - name: Execute dynamic tasks
+      ansible.builtin.include_tasks:
+        file: "/tmp/builder_dynamic_tasks.yml"
+      when: builder_tasks is defined and builder_tasks | length > 0

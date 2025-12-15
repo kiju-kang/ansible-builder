@@ -6,4 +6,6 @@ pydantic
 httpx
 sqlalchemy
 psycopg2-binary
-multipart
+python-multipart
+python-jose[cryptography]
+requests

@@ -1,0 +1,419 @@
+import React, { useState, useEffect } from 'react';
+import { Play, Plus, Loader, RefreshCw } from 'lucide-react';
+
+const API_URL = '/api';
+
+export default function ExecutionPanel({ playbooks, inventories, onExecute }) {
+  const [selectedPlaybook, setSelectedPlaybook] = useState(null);
+  const [selectedInventory, setSelectedInventory] = useState(null);
+
+  // AWX Configuration
+  // AWX 인증은 Backend에서 자동으로 처리됩니다 (Keycloak SSO 통합)
+  const [awxConfig, setAwxConfig] = useState({
+    url: '', // Will be loaded from backend
+    template_id: null
+  });
+
+  const [awxTemplates, setAwxTemplates] = useState([]);
+  const [creatingTemplate, setCreatingTemplate] = useState(false);
+  const [executorStatus, setExecutorStatus] = useState(null);
+
+  // Load default AWX config on mount
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const res = await fetch(`${API_URL}/awx/config`);
+        const data = await res.json();
+        if (data.url) {
+          setAwxConfig(prev => ({ ...prev, url: data.url }));
+        }
+      } catch (err) {
+        console.error('Failed to load AWX config:', err);
+      }
+    };
+    loadConfig();
+  }, []);
+
+  // Check executor status when AWX config changes
+  useEffect(() => {
+    const checkExecutor = async () => {
+      if (awxConfig.url) {
+        try {
+          const params = new URLSearchParams({
+            awx_url: awxConfig.url
+          });
+
+          const res = await fetch(`${API_URL}/awx/check-executor?${params}`);
+          const data = await res.json();
+          setExecutorStatus(data);
+        } catch (err) {
+          console.error('Failed to check executor status:', err);
+        }
+      }
+    };
+
+    const timeoutId = setTimeout(checkExecutor, 500);
+    return () => clearTimeout(timeoutId);
+  }, [awxConfig.url]);
+
+  const executePlaybook = async () => {
+    if (!selectedPlaybook || !selectedInventory) {
+      alert('Select both playbook and inventory');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playbook_id: selectedPlaybook,
+          inventory_id: selectedInventory,
+          extra_vars: {}
+        })
+      });
+      const result = await res.json();
+
+      if (onExecute) {
+        onExecute(result.execution_id);
+      }
+    } catch (err) {
+      alert('❌ Execution failed');
+    }
+  };
+
+  const loadAwxTemplates = async () => {
+    try {
+      const params = new URLSearchParams({
+        awx_url: awxConfig.url
+      });
+      const res = await fetch(`${API_URL}/awx/templates?${params}`);
+      const data = await res.json();
+      setAwxTemplates(data.templates || []);
+
+      if (data.templates && data.templates.length > 0) {
+        setAwxConfig({ ...awxConfig, template_id: data.templates[0].id });
+      }
+
+      alert(`✅ Loaded ${data.templates.length} templates`);
+    } catch (err) {
+      alert('❌ Failed to load AWX templates: ' + err.message);
+    }
+  };
+
+  const createAwxTemplate = async () => {
+    if (!selectedPlaybook || !selectedInventory) {
+      alert('Select both playbook and inventory');
+      return;
+    }
+
+    setCreatingTemplate(true);
+    try {
+      const res = await fetch(`${API_URL}/awx/create-template`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playbook_id: selectedPlaybook,
+          inventory_id: selectedInventory,
+          awx_url: awxConfig.url
+        })
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        alert(`❌ Error: ${result.detail || 'Failed to create template'}`);
+        return;
+      }
+
+      if (result.status === 'success') {
+        alert(`✅ Job Template Created!\n\nName: ${result.template_name}\nTemplate ID: ${result.template_id}\n\nInventory created with groups!`);
+        setAwxConfig({ ...awxConfig, template_id: result.template_id });
+        loadAwxTemplates();
+
+        if (result.template_url) {
+          window.open(result.template_url, '_blank');
+        }
+      } else if (result.status === 'setup_required') {
+        alert(`⚠️ Setup Required\n\n${result.instructions}`);
+      }
+    } catch (err) {
+      alert('❌ Failed to create AWX template: ' + err.message);
+    } finally {
+      setCreatingTemplate(false);
+    }
+  };
+
+  const launchAwxJob = async () => {
+    if (!selectedPlaybook || !selectedInventory) {
+      alert('Select both playbook and inventory');
+      return;
+    }
+    if (!awxConfig.template_id) {
+      alert('Select or create a Job Template first');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/awx/launch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playbook_id: selectedPlaybook,
+          inventory_id: selectedInventory,
+          awx_url: awxConfig.url,
+          job_template_id: awxConfig.template_id
+        })
+      });
+      const result = await res.json();
+
+      if (result.status === 'success') {
+        alert(`✅ AWX Job launched!\n\nJob ID: ${result.awx_job_id}`);
+        if (result.awx_job_url) {
+          // OIDC 리디렉션 엔드포인트를 통해 AWX Job 페이지 열기
+          const redirectUrl = `${API_URL}/awx/oidc-redirect?job_url=${encodeURIComponent(result.awx_job_url)}`;
+          window.open(redirectUrl, '_blank');
+        }
+      }
+    } catch (err) {
+      alert('❌ Failed to launch AWX job: ' + err.message);
+    }
+  };
+
+  const checkExecutorStatus = async () => {
+    try {
+      const params = new URLSearchParams({
+        awx_url: awxConfig.url
+      });
+
+      const res = await fetch(`${API_URL}/awx/check-executor?${params}`);
+      const data = await res.json();
+      setExecutorStatus(data);
+
+      if (data.status === 'ready') {
+        alert('✅ Executor playbook is ready!');
+      } else {
+        alert('⚠️ Executor setup required. See instructions above.');
+      }
+    } catch (err) {
+      alert('❌ Failed to check executor status');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Local Execution */}
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <h2 className="text-2xl font-bold mb-6">Execute Playbook (Local)</h2>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2">Select Playbook</label>
+          <select
+            value={selectedPlaybook || ''}
+            onChange={(e) => setSelectedPlaybook(e.target.value)}
+            className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          >
+            <option value="">-- Select Playbook --</option>
+            {playbooks.map(pb => (
+              <option key={pb.id} value={pb.id}>{pb.name} (ID: {pb.id})</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2">Select Inventory</label>
+          <select
+            value={selectedInventory || ''}
+            onChange={(e) => setSelectedInventory(e.target.value)}
+            className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          >
+            <option value="">-- Select Inventory --</option>
+            {inventories.map(inv => (
+              <option key={inv.id} value={inv.id}>{inv.name} (ID: {inv.id})</option>
+            ))}
+          </select>
+        </div>
+
+        <button
+          onClick={executePlaybook}
+          className="w-full px-6 py-3 bg-green-600 text-white rounded hover:bg-green-700 flex items-center justify-center gap-2 font-medium"
+        >
+          <Play size={20} />
+          Execute Locally
+        </button>
+      </div>
+
+      {/* AWX Execution */}
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <h2 className="text-2xl font-bold mb-6">Execute via AWX</h2>
+
+        {/* Executor Status Warning */}
+        {executorStatus?.status === 'setup_required' && (
+          <div className="bg-yellow-50 border-l-4 border-yellow-500 p-6 mb-6 rounded-lg">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-lg font-bold text-yellow-800 mb-2">⚙️ One-Time Setup Required</h3>
+                <p className="text-sm text-yellow-700 mb-3">
+                  To enable dynamic playbook execution, add the executor playbook to your AWX project.
+                </p>
+
+                <div className="bg-white border border-yellow-200 rounded p-4 mb-3">
+                  <h4 className="font-semibold text-yellow-800 mb-2">Setup Instructions:</h4>
+                  <pre className="text-xs bg-gray-50 p-3 rounded overflow-x-auto whitespace-pre-wrap text-gray-800">
+                    {executorStatus.instructions}
+                  </pre>
+                </div>
+
+                <details className="bg-white border border-yellow-200 rounded p-4 mb-3">
+                  <summary className="font-semibold text-yellow-800 cursor-pointer">
+                    📄 View Playbook Content
+                  </summary>
+                  <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded overflow-x-auto mt-2 max-h-96 overflow-y-auto font-mono">
+                    {executorStatus.playbook_content}
+                  </pre>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(executorStatus.playbook_content);
+                      alert('✅ Playbook content copied to clipboard!');
+                    }}
+                    className="mt-2 px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm"
+                  >
+                    📋 Copy to Clipboard
+                  </button>
+                </details>
+
+                <button
+                  onClick={checkExecutorStatus}
+                  className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 flex items-center gap-2"
+                >
+                  <RefreshCw size={18} />
+                  Recheck Status
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-2">AWX URL</label>
+          <input
+            type="text"
+            value={awxConfig.url}
+            onChange={(e) => setAwxConfig({ ...awxConfig, url: e.target.value })}
+            className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            placeholder="http://192.168.64.26:30000"
+          />
+          <p className="mt-2 text-sm text-gray-600">
+            ✓ AWX 인증은 Keycloak SSO를 통해 자동으로 처리됩니다
+          </p>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2">Select Playbook</label>
+          <select
+            value={selectedPlaybook || ''}
+            onChange={(e) => setSelectedPlaybook(e.target.value)}
+            className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          >
+            <option value="">-- Select Playbook --</option>
+            {playbooks.map(pb => (
+              <option key={pb.id} value={pb.id}>{pb.name} (ID: {pb.id})</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-2">Select Inventory</label>
+          <select
+            value={selectedInventory || ''}
+            onChange={(e) => setSelectedInventory(e.target.value)}
+            className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          >
+            <option value="">-- Select Inventory --</option>
+            {inventories.map(inv => (
+              <option key={inv.id} value={inv.id}>{inv.name} (ID: {inv.id})</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mb-6 pb-6 border-b">
+          <button
+            onClick={createAwxTemplate}
+            disabled={creatingTemplate || executorStatus?.status === 'setup_required'}
+            className={`w-full px-6 py-3 text-white rounded flex items-center justify-center gap-2 font-medium ${executorStatus?.status === 'setup_required' || creatingTemplate
+              ? 'bg-gray-400 cursor-not-allowed'
+              : 'bg-indigo-600 hover:bg-indigo-700'
+              }`}
+          >
+            {creatingTemplate ? (
+              <>
+                <Loader className="animate-spin" size={20} />
+                Creating Template...
+              </>
+            ) : executorStatus?.status === 'setup_required' ? (
+              <>
+                <span>⚠️</span>
+                Setup Required (See Above)
+              </>
+            ) : (
+              <>
+                <Plus size={20} />
+                Create Job Template in AWX
+              </>
+            )}
+          </button>
+          <p className="text-xs text-gray-600 mt-2 text-center">
+            This will automatically create a new Job Template, Project, and Inventory in AWX
+          </p>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2">Existing Job Templates</label>
+          <div className="flex gap-2">
+            <select
+              value={awxConfig.template_id || ''}
+              onChange={(e) => setAwxConfig({ ...awxConfig, template_id: parseInt(e.target.value) })}
+              className="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            >
+              <option value="">-- Select Template --</option>
+              {awxTemplates.map(tpl => (
+                <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={loadAwxTemplates}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"
+            >
+              <RefreshCw size={18} />
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <button
+          onClick={launchAwxJob}
+          className="w-full px-6 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center justify-center gap-2 font-medium"
+        >
+          <Play size={20} />
+          Execute Job in AWX
+        </button>
+
+        <div className="mt-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
+          <p className="text-sm text-blue-800">
+            <strong>Steps:</strong>
+          </p>
+          <ol className="text-sm text-blue-800 mt-2 ml-4 list-decimal space-y-1">
+            <li>Select Playbook and Inventory</li>
+            <li>Click "Create Job Template" to auto-create in AWX</li>
+            <li>Or select existing template and click "Execute Job"</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  );
+}

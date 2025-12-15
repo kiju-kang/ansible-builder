@@ -1,0 +1,968 @@
+INFO:     Will watch for changes in these directories: ['/root/ansible-builder/ansible-builder/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [1034437] using watchgod
+/usr/local/lib/python3.6/site-packages/jose/backends/cryptography_backend.py:4: CryptographyDeprecationWarning: Python 3.6 is no longer supported by the Python core team. Therefore, support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.6.
+  from cryptography.exceptions import InvalidSignature, InvalidTag
+INFO:     Started server process [1036303]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+✓ Keycloak SSO authentication enabled
+✓ AWX integration configured: http://192.168.64.26:30000
+✓ Frontend served from: ./../frontend/frontend/dist
+Database initialized successfully
+User authentication managed by Keycloak SSO
+INFO:     127.0.0.1:50836 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39086 - "GET /api/awx/oidc-redirect?job_url=http://192.168.64.26:30000/%23/jobs/playbook/999 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59183 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59184 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:59183 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:59183 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59183 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59184 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:59183 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:59183 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59184 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59184 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59184 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59183 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59183 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59183 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59184 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:59183 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:59183 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59184 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59243 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59244 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:59243 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:59243 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59244 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59243 - "GET /api/playbooks HTTP/1.1" 200 OK
+✅ Executor playbook exists: ansible_builder_executor.yml
+INFO:     192.168.64.1:59243 - "GET /api/awx/check-executor?awx_url=http%3A%2F%2F192.168.64.26%3A30000&project_id=6 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59243 - "GET /api/awx/templates?awx_url=http%3A%2F%2F192.168.64.26%3A30000 HTTP/1.1" 200 OK
+🚀 Launching job with payload:
+{
+  "extra_vars": "{\"builder_playbook_name\": \"OS presets before deploying Kubernetes\", \"target_hosts\": \"admin_control, admin_worker\", \"become_required\": true, \"builder_tasks\": [{\"name\": \"Update APT repository\", \"module\": \"apt\", \"params\": {\"update_cache\": \"True\"}}, {\"name\": \"Install required packages\", \"module\": \"apt\", \"params\": {\"name\": \"['ca-certificates', 'curl', 'gnupg', 'lsb-release', 'apt-transport-https']\", \"state\": \"present\"}}, {\"name\": \"Disable swap\", \"module\": \"command\", \"params\": {\"cmd\": \"swapoff -a\"}}, {\"name\": \"Remove swap entry from /etc/fstab\", \"module\": \"replace\", \"params\": {\"path\": \"/etc/fstab\", \"regexp\": \"^.*swap.*$\", \"replace\": \"\"}}, {\"name\": \"Load kernel modules for containerd\", \"module\": \"copy\", \"params\": {\"dest\": \"/etc/modules-load.d/containerd.conf\", \"content\": \"overlay\\nbr_netfilter\\n\"}}, {\"name\": \"Apply kernel modules\", \"module\": \"modprobe\", \"params\": {\"name\": \"{{ item }}\", \"state\": \"present\"}}, {\"name\": \"Configure sysctl settings for Kubernetes\", \"module\": \"copy\", \"params\": {\"dest\": \"/etc/sysctl.d/99-kubernetes-cri.conf\", \"content\": \"net.bridge.bridge-nf-call-iptables  = 1\\nnet.ipv4.ip_forward                 = 1\\nnet.bridge.bridge-nf-call-ip6tables = 1\\n\"}}, {\"name\": \"Apply sysctl settings\", \"module\": \"command\", \"params\": {\"cmd\": \"sysctl --system\"}}, {\"name\": \"Add Docker GPG key\", \"module\": \"get_url\", \"params\": {\"url\": \"https://download.docker.com/linux/ubuntu/gpg\", \"dest\": \"/usr/share/keyrings/docker.asc\", \"mode\": \"0644\"}}, {\"name\": \"Add Kubernetes GPG key\", \"module\": \"get_url\", \"params\": {\"url\": \"https://pkgs.k8s.io/core:/stable:/{{ apt_key_k8s }}/deb/Release.key\", \"dest\": \"/usr/share/keyrings/kubernetes-apt-keyring.asc\", \"mode\": \"0644\"}}, {\"name\": \"Add Docker repository\", \"module\": \"apt_repository\", \"params\": {\"repo\": \"deb [arch={{ 'amd64' if ansible_architecture in ['x86_64'] else 'arm64' }} signed-by=/usr/share/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable\", \"state\": \"present\"}}, {\"name\": \"Add Kubernetes repository\", \"module\": \"apt_repository\", \"params\": {\"repo\": \"deb [signed-by=/usr/share/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/{{ apt_key_k8s }}/deb/ /\", \"state\": \"present\"}}, {\"name\": \"Update APT repository again\", \"module\": \"apt\", \"params\": {\"update_cache\": \"True\"}}, {\"name\": \"Install Kubernetes Package and containerd\", \"module\": \"apt\", \"params\": {\"name\": \"['kubelet={{ apt_k8s_version }}', 'kubeadm={{ apt_k8s_version }}', 'kubectl={{ apt_k8s_version }}', 'containerd.io={{ apt_cri_version }}']\", \"state\": \"present\"}}, {\"name\": \"Configure containerd default settings\", \"module\": \"shell\", \"params\": {\"cmd\": \"containerd config default > /etc/containerd/config.toml\"}}, {\"name\": \"Enable Systemd Cgroup in containerd\", \"module\": \"replace\", \"params\": {\"path\": \"/etc/containerd/config.toml\", \"regexp\": \"SystemdCgroup = false\", \"replace\": \"SystemdCgroup = true\"}}, {\"name\": \"Reload systemd daemon and restart containerd\", \"module\": \"systemd\", \"params\": {\"name\": \"containerd\", \"enabled\": \"True\", \"state\": \"restarted\", \"daemon_reload\": \"True\"}}]}"
+}
+INFO:     192.168.64.1:59306 - "POST /api/awx/launch HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59306 - "GET /api/awx/oidc-redirect?job_url=http%3A%2F%2F192.168.64.26%3A30000%2F%23%2Fjobs%2Fplaybook%2F190 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59306 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59612 - "GET /api/awx/oidc-redirect?job_url=http%3A%2F%2F192.168.64.26%3A30000%2F%23%2Fjobs%2Fplaybook%2F190 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59612 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59613 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59784 - "GET /api/playbooks HTTP/1.1" 200 OK
+[AUDIT] DELETE playbook#108 by anonymous: Deleted playbook: OS presets before deploying Kubernetes
+INFO:     192.168.64.1:59784 - "DELETE /api/playbooks/108 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59784 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59784 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59784 - "GET /api/inventories/58 HTTP/1.1" 200 OK
+[AUDIT] DELETE inventory#58 by anonymous: Deleted inventory: ㅁㅇㄹㅁㅇㄹㅁㄴㄹ
+INFO:     192.168.64.1:59837 - "DELETE /api/inventories/58 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59837 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59837 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59846 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59846 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59846 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59846 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59879 - "POST /api/inventories/import-text HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59879 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:59879 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60253 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60253 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60253 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60253 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60253 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60253 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60253 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60253 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60253 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60299 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60299 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60299 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60604 - "POST /api/playbooks/import-text HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60604 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60604 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60604 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60622 - "GET /api/inventories HTTP/1.1" 200 OK
+✅ Executor playbook exists: ansible_builder_executor.yml
+INFO:     192.168.64.1:60622 - "GET /api/awx/check-executor?awx_url=http%3A%2F%2F192.168.64.26%3A30000&project_id=6 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60663 - "GET /api/awx/templates?awx_url=http%3A%2F%2F192.168.64.26%3A30000 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60865 - "POST /api/awx/create-template HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60865 - "GET /api/awx/templates?awx_url=http%3A%2F%2F192.168.64.26%3A30000 HTTP/1.1" 200 OK
+🚀 Launching job with payload:
+{
+  "extra_vars": "{\"builder_playbook_name\": \"OS presets before deploying Kubernetes\", \"target_hosts\": \"admin_control, admin_worker\", \"become_required\": true, \"builder_tasks\": [{\"name\": \"Update APT repository\", \"module\": \"apt\", \"params\": {\"update_cache\": \"True\"}}, {\"name\": \"Install required packages\", \"module\": \"apt\", \"params\": {\"name\": \"['ca-certificates', 'curl', 'gnupg', 'lsb-release', 'apt-transport-https']\", \"state\": \"present\"}}, {\"name\": \"Disable swap\", \"module\": \"command\", \"params\": {\"cmd\": \"swapoff -a\"}}, {\"name\": \"Remove swap entry from /etc/fstab\", \"module\": \"replace\", \"params\": {\"path\": \"/etc/fstab\", \"regexp\": \"^.*swap.*$\", \"replace\": \"\"}}, {\"name\": \"Load kernel modules for containerd\", \"module\": \"copy\", \"params\": {\"dest\": \"/etc/modules-load.d/containerd.conf\", \"content\": \"overlay\\nbr_netfilter\\n\"}}, {\"name\": \"Apply kernel modules\", \"module\": \"modprobe\", \"params\": {\"name\": \"{{ item }}\", \"state\": \"present\"}}, {\"name\": \"Configure sysctl settings for Kubernetes\", \"module\": \"copy\", \"params\": {\"dest\": \"/etc/sysctl.d/99-kubernetes-cri.conf\", \"content\": \"net.bridge.bridge-nf-call-iptables  = 1\\nnet.ipv4.ip_forward                 = 1\\nnet.bridge.bridge-nf-call-ip6tables = 1\\n\"}}, {\"name\": \"Apply sysctl settings\", \"module\": \"command\", \"params\": {\"cmd\": \"sysctl --system\"}}, {\"name\": \"Add Docker GPG key\", \"module\": \"get_url\", \"params\": {\"url\": \"https://download.docker.com/linux/ubuntu/gpg\", \"dest\": \"/usr/share/keyrings/docker.asc\", \"mode\": \"0644\"}}, {\"name\": \"Add Kubernetes GPG key\", \"module\": \"get_url\", \"params\": {\"url\": \"https://pkgs.k8s.io/core:/stable:/{{ apt_key_k8s }}/deb/Release.key\", \"dest\": \"/usr/share/keyrings/kubernetes-apt-keyring.asc\", \"mode\": \"0644\"}}, {\"name\": \"Add Docker repository\", \"module\": \"apt_repository\", \"params\": {\"repo\": \"deb [arch={{ 'amd64' if ansible_architecture in ['x86_64'] else 'arm64' }} signed-by=/usr/share/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable\", \"state\": \"present\"}}, {\"name\": \"Add Kubernetes repository\", \"module\": \"apt_repository\", \"params\": {\"repo\": \"deb [signed-by=/usr/share/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/{{ apt_key_k8s }}/deb/ /\", \"state\": \"present\"}}, {\"name\": \"Update APT repository again\", \"module\": \"apt\", \"params\": {\"update_cache\": \"True\"}}, {\"name\": \"Install Kubernetes Package and containerd\", \"module\": \"apt\", \"params\": {\"name\": \"['kubelet={{ apt_k8s_version }}', 'kubeadm={{ apt_k8s_version }}', 'kubectl={{ apt_k8s_version }}', 'containerd.io={{ apt_cri_version }}']\", \"state\": \"present\"}}, {\"name\": \"Configure containerd default settings\", \"module\": \"shell\", \"params\": {\"cmd\": \"containerd config default > /etc/containerd/config.toml\"}}, {\"name\": \"Enable Systemd Cgroup in containerd\", \"module\": \"replace\", \"params\": {\"path\": \"/etc/containerd/config.toml\", \"regexp\": \"SystemdCgroup = false\", \"replace\": \"SystemdCgroup = true\"}}, {\"name\": \"Reload systemd daemon and restart containerd\", \"module\": \"systemd\", \"params\": {\"name\": \"containerd\", \"enabled\": \"True\", \"state\": \"restarted\", \"daemon_reload\": \"True\"}}]}"
+}
+INFO:     192.168.64.1:61095 - "POST /api/awx/launch HTTP/1.1" 200 OK
+INFO:     192.168.64.1:61095 - "GET /api/awx/oidc-redirect?job_url=http%3A%2F%2F192.168.64.26%3A30000%2F%23%2Fjobs%2Fplaybook%2F192 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:61095 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63621 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63621 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63622 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63621 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63621 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63621 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:63622 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:63622 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63621 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63621 - "GET /api/playbooks HTTP/1.1" 200 OK
+[AUDIT] DELETE playbook#109 by anonymous: Deleted playbook: OS presets before deploying Kubernetes
+INFO:     192.168.64.1:63621 - "DELETE /api/playbooks/109 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63621 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63621 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63621 - "GET /api/inventories/59 HTTP/1.1" 200 OK
+[AUDIT] DELETE inventory#59 by anonymous: Deleted inventory: Imported_1765774779694
+INFO:     192.168.64.1:63621 - "DELETE /api/inventories/59 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63621 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63621 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63696 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63696 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63696 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63696 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63696 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63696 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:63722 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:63722 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63722 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63722 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:63696 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:63696 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63722 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63696 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63722 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63696 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63696 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63696 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63696 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:63722 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:63722 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63696 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63814 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63814 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:63855 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:63855 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63814 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63814 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63814 - "POST /api/inventories/import-text HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63814 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63814 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:64110 - "POST /api/playbooks/import-text HTTP/1.1" 200 OK
+INFO:     192.168.64.1:64110 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:64110 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:64110 - "GET /api/playbooks/110 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:64110 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:64110 - "GET /api/inventories/60 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:64110 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:64110 - "GET /api/playbooks/110 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:64110 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:64146 - "GET /api/inventories HTTP/1.1" 200 OK
+✅ Executor playbook exists: ansible_builder_executor.yml
+INFO:     192.168.64.1:64146 - "GET /api/awx/check-executor?awx_url=http%3A%2F%2F192.168.64.26%3A30000&project_id=6 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:64146 - "POST /api/awx/create-template HTTP/1.1" 200 OK
+INFO:     192.168.64.1:64146 - "GET /api/awx/templates?awx_url=http%3A%2F%2F192.168.64.26%3A30000 HTTP/1.1" 200 OK
+🚀 Launching job with payload:
+{
+  "extra_vars": "{\"builder_playbook_name\": \"OS presets before deploying Kubernetes\", \"target_hosts\": \"admin_control, admin_worker\", \"become_required\": true, \"builder_tasks\": [{\"name\": \"Update APT repository\", \"module\": \"apt\", \"params\": {\"update_cache\": \"True\"}}, {\"name\": \"Install required packages\", \"module\": \"apt\", \"params\": {\"name\": \"['ca-certificates', 'curl', 'gnupg', 'lsb-release', 'apt-transport-https']\", \"state\": \"present\"}}, {\"name\": \"Disable swap\", \"module\": \"command\", \"params\": {\"cmd\": \"swapoff -a\"}}, {\"name\": \"Remove swap entry from /etc/fstab\", \"module\": \"replace\", \"params\": {\"path\": \"/etc/fstab\", \"regexp\": \"^.*swap.*$\", \"replace\": \"\"}}, {\"name\": \"Load kernel modules for containerd\", \"module\": \"copy\", \"params\": {\"dest\": \"/etc/modules-load.d/containerd.conf\", \"content\": \"overlay\\nbr_netfilter\\n\"}}, {\"name\": \"Apply kernel modules\", \"module\": \"modprobe\", \"params\": {\"name\": \"{{ item }}\", \"state\": \"present\"}}, {\"name\": \"Configure sysctl settings for Kubernetes\", \"module\": \"copy\", \"params\": {\"dest\": \"/etc/sysctl.d/99-kubernetes-cri.conf\", \"content\": \"net.bridge.bridge-nf-call-iptables  = 1\\nnet.ipv4.ip_forward                 = 1\\nnet.bridge.bridge-nf-call-ip6tables = 1\\n\"}}, {\"name\": \"Apply sysctl settings\", \"module\": \"command\", \"params\": {\"cmd\": \"sysctl --system\"}}, {\"name\": \"Add Docker GPG key\", \"module\": \"get_url\", \"params\": {\"url\": \"https://download.docker.com/linux/ubuntu/gpg\", \"dest\": \"/usr/share/keyrings/docker.asc\", \"mode\": \"0644\"}}, {\"name\": \"Add Kubernetes GPG key\", \"module\": \"get_url\", \"params\": {\"url\": \"https://pkgs.k8s.io/core:/stable:/{{ apt_key_k8s }}/deb/Release.key\", \"dest\": \"/usr/share/keyrings/kubernetes-apt-keyring.asc\", \"mode\": \"0644\"}}, {\"name\": \"Add Docker repository\", \"module\": \"apt_repository\", \"params\": {\"repo\": \"deb [arch={{ 'amd64' if ansible_architecture in ['x86_64'] else 'arm64' }} signed-by=/usr/share/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable\", \"state\": \"present\"}}, {\"name\": \"Add Kubernetes repository\", \"module\": \"apt_repository\", \"params\": {\"repo\": \"deb [signed-by=/usr/share/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/{{ apt_key_k8s }}/deb/ /\", \"state\": \"present\"}}, {\"name\": \"Update APT repository again\", \"module\": \"apt\", \"params\": {\"update_cache\": \"True\"}}, {\"name\": \"Install Kubernetes Package and containerd\", \"module\": \"apt\", \"params\": {\"name\": \"['kubelet={{ apt_k8s_version }}', 'kubeadm={{ apt_k8s_version }}', 'kubectl={{ apt_k8s_version }}', 'containerd.io={{ apt_cri_version }}']\", \"state\": \"present\"}}, {\"name\": \"Configure containerd default settings\", \"module\": \"shell\", \"params\": {\"cmd\": \"containerd config default > /etc/containerd/config.toml\"}}, {\"name\": \"Enable Systemd Cgroup in containerd\", \"module\": \"replace\", \"params\": {\"path\": \"/etc/containerd/config.toml\", \"regexp\": \"SystemdCgroup = false\", \"replace\": \"SystemdCgroup = true\"}}, {\"name\": \"Reload systemd daemon and restart containerd\", \"module\": \"systemd\", \"params\": {\"name\": \"containerd\", \"enabled\": \"True\", \"state\": \"restarted\", \"daemon_reload\": \"True\"}}]}"
+}
+INFO:     192.168.64.1:64257 - "POST /api/awx/launch HTTP/1.1" 200 OK
+INFO:     192.168.64.1:64257 - "GET /api/awx/oidc-redirect?job_url=http%3A%2F%2F192.168.64.26%3A30000%2F%23%2Fjobs%2Fplaybook%2F194 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:64257 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:50336 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:50336 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:50337 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:50337 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:50337 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:50336 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:50337 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:50337 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:50336 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:50409 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:50410 - "GET /api/inventories HTTP/1.1" 200 OK
+✅ Executor playbook exists: ansible_builder_executor.yml
+INFO:     192.168.64.1:50410 - "GET /api/awx/check-executor?awx_url=http%3A%2F%2F192.168.64.26%3A30000&project_id=6 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:50436 - "GET /api/awx/templates?awx_url=http%3A%2F%2F192.168.64.26%3A30000 HTTP/1.1" 200 OK
+🚀 Launching job with payload:
+{
+  "extra_vars": "{\"builder_playbook_name\": \"OS presets before deploying Kubernetes\", \"target_hosts\": \"admin_control, admin_worker\", \"become_required\": true, \"builder_tasks\": [{\"name\": \"Update APT repository\", \"module\": \"apt\", \"params\": {\"update_cache\": \"True\"}}, {\"name\": \"Install required packages\", \"module\": \"apt\", \"params\": {\"name\": \"['ca-certificates', 'curl', 'gnupg', 'lsb-release', 'apt-transport-https']\", \"state\": \"present\"}}, {\"name\": \"Disable swap\", \"module\": \"command\", \"params\": {\"cmd\": \"swapoff -a\"}}, {\"name\": \"Remove swap entry from /etc/fstab\", \"module\": \"replace\", \"params\": {\"path\": \"/etc/fstab\", \"regexp\": \"^.*swap.*$\", \"replace\": \"\"}}, {\"name\": \"Load kernel modules for containerd\", \"module\": \"copy\", \"params\": {\"dest\": \"/etc/modules-load.d/containerd.conf\", \"content\": \"overlay\\nbr_netfilter\\n\"}}, {\"name\": \"Apply kernel modules\", \"module\": \"modprobe\", \"params\": {\"name\": \"{{ item }}\", \"state\": \"present\"}}, {\"name\": \"Configure sysctl settings for Kubernetes\", \"module\": \"copy\", \"params\": {\"dest\": \"/etc/sysctl.d/99-kubernetes-cri.conf\", \"content\": \"net.bridge.bridge-nf-call-iptables  = 1\\nnet.ipv4.ip_forward                 = 1\\nnet.bridge.bridge-nf-call-ip6tables = 1\\n\"}}, {\"name\": \"Apply sysctl settings\", \"module\": \"command\", \"params\": {\"cmd\": \"sysctl --system\"}}, {\"name\": \"Add Docker GPG key\", \"module\": \"get_url\", \"params\": {\"url\": \"https://download.docker.com/linux/ubuntu/gpg\", \"dest\": \"/usr/share/keyrings/docker.asc\", \"mode\": \"0644\"}}, {\"name\": \"Add Kubernetes GPG key\", \"module\": \"get_url\", \"params\": {\"url\": \"https://pkgs.k8s.io/core:/stable:/{{ apt_key_k8s }}/deb/Release.key\", \"dest\": \"/usr/share/keyrings/kubernetes-apt-keyring.asc\", \"mode\": \"0644\"}}, {\"name\": \"Add Docker repository\", \"module\": \"apt_repository\", \"params\": {\"repo\": \"deb [arch={{ 'amd64' if ansible_architecture in ['x86_64'] else 'arm64' }} signed-by=/usr/share/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable\", \"state\": \"present\"}}, {\"name\": \"Add Kubernetes repository\", \"module\": \"apt_repository\", \"params\": {\"repo\": \"deb [signed-by=/usr/share/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/{{ apt_key_k8s }}/deb/ /\", \"state\": \"present\"}}, {\"name\": \"Update APT repository again\", \"module\": \"apt\", \"params\": {\"update_cache\": \"True\"}}, {\"name\": \"Install Kubernetes Package and containerd\", \"module\": \"apt\", \"params\": {\"name\": \"['kubelet={{ apt_k8s_version }}', 'kubeadm={{ apt_k8s_version }}', 'kubectl={{ apt_k8s_version }}', 'containerd.io={{ apt_cri_version }}']\", \"state\": \"present\"}}, {\"name\": \"Configure containerd default settings\", \"module\": \"shell\", \"params\": {\"cmd\": \"containerd config default > /etc/containerd/config.toml\"}}, {\"name\": \"Enable Systemd Cgroup in containerd\", \"module\": \"replace\", \"params\": {\"path\": \"/etc/containerd/config.toml\", \"regexp\": \"SystemdCgroup = false\", \"replace\": \"SystemdCgroup = true\"}}, {\"name\": \"Reload systemd daemon and restart containerd\", \"module\": \"systemd\", \"params\": {\"name\": \"containerd\", \"enabled\": \"True\", \"state\": \"restarted\", \"daemon_reload\": \"True\"}}]}"
+}
+INFO:     192.168.64.1:50461 - "POST /api/awx/launch HTTP/1.1" 200 OK
+INFO:     192.168.64.1:50461 - "GET /api/awx/oidc-redirect?job_url=http%3A%2F%2F192.168.64.26%3A30000%2F%23%2Fjobs%2Fplaybook%2F196 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:50461 - "GET /favicon.ico HTTP/1.1" 200 OK
+WARNING:  WatchGodReload detected file change in '['/root/ansible-builder/ansible-builder/backend/main.py']'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1036303]
+/usr/local/lib/python3.6/site-packages/jose/backends/cryptography_backend.py:4: CryptographyDeprecationWarning: Python 3.6 is no longer supported by the Python core team. Therefore, support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.6.
+  from cryptography.exceptions import InvalidSignature, InvalidTag
+INFO:     Started server process [1084553]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+✓ Keycloak SSO authentication enabled
+✓ AWX integration configured: http://192.168.64.26:30000
+✓ Frontend served from: ./../frontend/frontend/dist
+Database initialized successfully
+User authentication managed by Keycloak SSO
+INFO:     127.0.0.1:56960 - "GET /health HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53382 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:53382 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:53382 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53382 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53382 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:53383 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:53382 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53382 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53382 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:53383 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:53382 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:53382 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:53382 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53382 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:53382 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:53382 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53382 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53382 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53383 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:53382 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:53382 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53474 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53474 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:53475 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 304 Not Modified
+INFO:     192.168.64.1:53475 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53474 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53475 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53475 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53475 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53505 - "GET /api/inventories HTTP/1.1" 200 OK
+✅ Executor playbook exists: ansible_builder_executor.yml
+INFO:     192.168.64.1:53505 - "GET /api/awx/check-executor?awx_url=http%3A%2F%2F192.168.64.26%3A30000&project_id=6 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53505 - "POST /api/awx/create-template HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53505 - "GET /api/awx/templates?awx_url=http%3A%2F%2F192.168.64.26%3A30000 HTTP/1.1" 200 OK
+🚀 Launching job with payload:
+{
+  "extra_vars": "{\"builder_playbook_name\": \"OS presets before deploying Kubernetes\", \"target_hosts\": \"admin_control, admin_worker\", \"become_required\": true, \"builder_tasks\": [{\"name\": \"Update APT repository\", \"module\": \"apt\", \"params\": {\"update_cache\": \"True\"}}, {\"name\": \"Install required packages\", \"module\": \"apt\", \"params\": {\"name\": \"['ca-certificates', 'curl', 'gnupg', 'lsb-release', 'apt-transport-https']\", \"state\": \"present\"}}, {\"name\": \"Disable swap\", \"module\": \"command\", \"params\": {\"cmd\": \"swapoff -a\"}}, {\"name\": \"Remove swap entry from /etc/fstab\", \"module\": \"replace\", \"params\": {\"path\": \"/etc/fstab\", \"regexp\": \"^.*swap.*$\", \"replace\": \"\"}}, {\"name\": \"Load kernel modules for containerd\", \"module\": \"copy\", \"params\": {\"dest\": \"/etc/modules-load.d/containerd.conf\", \"content\": \"overlay\\nbr_netfilter\\n\"}}, {\"name\": \"Apply kernel modules\", \"module\": \"modprobe\", \"params\": {\"name\": \"{{ item }}\", \"state\": \"present\"}}, {\"name\": \"Configure sysctl settings for Kubernetes\", \"module\": \"copy\", \"params\": {\"dest\": \"/etc/sysctl.d/99-kubernetes-cri.conf\", \"content\": \"net.bridge.bridge-nf-call-iptables  = 1\\nnet.ipv4.ip_forward                 = 1\\nnet.bridge.bridge-nf-call-ip6tables = 1\\n\"}}, {\"name\": \"Apply sysctl settings\", \"module\": \"command\", \"params\": {\"cmd\": \"sysctl --system\"}}, {\"name\": \"Add Docker GPG key\", \"module\": \"get_url\", \"params\": {\"url\": \"https://download.docker.com/linux/ubuntu/gpg\", \"dest\": \"/usr/share/keyrings/docker.asc\", \"mode\": \"0644\"}}, {\"name\": \"Add Kubernetes GPG key\", \"module\": \"get_url\", \"params\": {\"url\": \"https://pkgs.k8s.io/core:/stable:/{{ apt_key_k8s }}/deb/Release.key\", \"dest\": \"/usr/share/keyrings/kubernetes-apt-keyring.asc\", \"mode\": \"0644\"}}, {\"name\": \"Add Docker repository\", \"module\": \"apt_repository\", \"params\": {\"repo\": \"deb [arch={{ 'amd64' if ansible_architecture in ['x86_64'] else 'arm64' }} signed-by=/usr/share/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable\", \"state\": \"present\"}}, {\"name\": \"Add Kubernetes repository\", \"module\": \"apt_repository\", \"params\": {\"repo\": \"deb [signed-by=/usr/share/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/{{ apt_key_k8s }}/deb/ /\", \"state\": \"present\"}}, {\"name\": \"Update APT repository again\", \"module\": \"apt\", \"params\": {\"update_cache\": \"True\"}}, {\"name\": \"Install Kubernetes Package and containerd\", \"module\": \"apt\", \"params\": {\"name\": \"['kubelet={{ apt_k8s_version }}', 'kubeadm={{ apt_k8s_version }}', 'kubectl={{ apt_k8s_version }}', 'containerd.io={{ apt_cri_version }}']\", \"state\": \"present\"}}, {\"name\": \"Configure containerd default settings\", \"module\": \"shell\", \"params\": {\"cmd\": \"containerd config default > /etc/containerd/config.toml\"}}, {\"name\": \"Enable Systemd Cgroup in containerd\", \"module\": \"replace\", \"params\": {\"path\": \"/etc/containerd/config.toml\", \"regexp\": \"SystemdCgroup = false\", \"replace\": \"SystemdCgroup = true\"}}, {\"name\": \"Reload systemd daemon and restart containerd\", \"module\": \"systemd\", \"params\": {\"name\": \"containerd\", \"enabled\": \"True\", \"state\": \"restarted\", \"daemon_reload\": \"True\"}}]}"
+}
+INFO:     192.168.64.1:53594 - "POST /api/awx/launch HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53594 - "GET /api/awx/oidc-redirect?job_url=http%3A%2F%2F192.168.64.26%3A30000%2F%23%2Fjobs%2Fplaybook%2F200%2Foutput HTTP/1.1" 200 OK
+INFO:     192.168.64.1:53594 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49483 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49483 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49484 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49483 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49597 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49640 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49640 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49640 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49645 - "GET /api/inventories HTTP/1.1" 200 OK
+⚠️ Executor playbook NOT found: ansible_builder_executor.yml
+Available playbooks: []
+Project: Demo Project, SCM: , Local: _6__demo_project
+INFO:     192.168.64.1:49645 - "GET /api/awx/check-executor?awx_url=http%3A%2F%2F192.168.64.26%3A30000&project_id=6 HTTP/1.1" 200 OK
+⚠️ Executor playbook NOT found: ansible_builder_executor.yml
+Available playbooks: []
+Project: Demo Project, SCM: , Local: _6__demo_project
+INFO:     192.168.64.1:49683 - "GET /api/awx/check-executor?awx_url=http%3A%2F%2F192.168.64.26%3A30000&project_id=6 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49683 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49683 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49701 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49701 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49701 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49701 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49683 - "GET /api/inventories HTTP/1.1" 200 OK
+INFO:     192.168.64.1:49701 - "GET /api/playbooks HTTP/1.1" 200 OK
+⚠️ Executor playbook NOT found: ansible_builder_executor.yml
+Available playbooks: []
+Project: Demo Project, SCM: , Local: _6__demo_project
+INFO:     192.168.64.1:49701 - "GET /api/awx/check-executor?awx_url=http%3A%2F%2F192.168.64.26%3A30000&project_id=6 HTTP/1.1" 200 OK
+⚠️ Executor playbook NOT found: ansible_builder_executor.yml
+Available playbooks: []
+Project: Demo Project, SCM: , Local: _6__demo_project
+INFO:     127.0.0.1:34844 - "GET /api/awx/check-executor?awx_url=http://192.168.64.26:30000&project_id=6 HTTP/1.1" 200 OK
+⚠️ Executor playbook NOT found: ansible_builder_executor.yml
+Available playbooks: []
+Project: Demo Project, SCM: , Local: _6__demo_project
+INFO:     127.0.0.1:36206 - "GET /api/awx/check-executor?awx_url=http://192.168.64.26:30000&project_id=6 HTTP/1.1" 200 OK
+⚠️ Executor playbook NOT found: ansible_builder_executor.yml
+Available playbooks: []
+Project: Demo Project, SCM: , Local: _6__demo_project
+INFO:     127.0.0.1:34596 - "GET /api/awx/check-executor?awx_url=http://192.168.64.26:30000&project_id=6 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60034 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60034 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60035 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60034 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60035 - "GET /favicon.ico HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60035 - "GET /api/playbooks HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60088 - "GET /api/inventories HTTP/1.1" 200 OK
+✅ Executor playbook exists: ansible_builder_executor.yml
+INFO:     192.168.64.1:60088 - "GET /api/awx/check-executor?awx_url=http%3A%2F%2F192.168.64.26%3A30000&project_id=6 HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60088 - "POST /api/awx/create-template HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60088 - "GET /api/awx/templates?awx_url=http%3A%2F%2F192.168.64.26%3A30000 HTTP/1.1" 200 OK
+🚀 Launching job with payload:
+{
+  "extra_vars": "{\"builder_playbook_name\": \"OS presets before deploying Kubernetes\", \"target_hosts\": \"admin_control, admin_worker\", \"become_required\": true, \"builder_tasks\": [{\"name\": \"Update APT repository\", \"module\": \"apt\", \"params\": {\"update_cache\": \"True\"}}, {\"name\": \"Install required packages\", \"module\": \"apt\", \"params\": {\"name\": \"['ca-certificates', 'curl', 'gnupg', 'lsb-release', 'apt-transport-https']\", \"state\": \"present\"}}, {\"name\": \"Disable swap\", \"module\": \"command\", \"params\": {\"cmd\": \"swapoff -a\"}}, {\"name\": \"Remove swap entry from /etc/fstab\", \"module\": \"replace\", \"params\": {\"path\": \"/etc/fstab\", \"regexp\": \"^.*swap.*$\", \"replace\": \"\"}}, {\"name\": \"Load kernel modules for containerd\", \"module\": \"copy\", \"params\": {\"dest\": \"/etc/modules-load.d/containerd.conf\", \"content\": \"overlay\\nbr_netfilter\\n\"}}, {\"name\": \"Apply kernel modules\", \"module\": \"modprobe\", \"params\": {\"name\": \"{{ item }}\", \"state\": \"present\"}}, {\"name\": \"Configure sysctl settings for Kubernetes\", \"module\": \"copy\", \"params\": {\"dest\": \"/etc/sysctl.d/99-kubernetes-cri.conf\", \"content\": \"net.bridge.bridge-nf-call-iptables  = 1\\nnet.ipv4.ip_forward                 = 1\\nnet.bridge.bridge-nf-call-ip6tables = 1\\n\"}}, {\"name\": \"Apply sysctl settings\", \"module\": \"command\", \"params\": {\"cmd\": \"sysctl --system\"}}, {\"name\": \"Add Docker GPG key\", \"module\": \"get_url\", \"params\": {\"url\": \"https://download.docker.com/linux/ubuntu/gpg\", \"dest\": \"/usr/share/keyrings/docker.asc\", \"mode\": \"0644\"}}, {\"name\": \"Add Kubernetes GPG key\", \"module\": \"get_url\", \"params\": {\"url\": \"https://pkgs.k8s.io/core:/stable:/{{ apt_key_k8s }}/deb/Release.key\", \"dest\": \"/usr/share/keyrings/kubernetes-apt-keyring.asc\", \"mode\": \"0644\"}}, {\"name\": \"Add Docker repository\", \"module\": \"apt_repository\", \"params\": {\"repo\": \"deb [arch={{ 'amd64' if ansible_architecture in ['x86_64'] else 'arm64' }} signed-by=/usr/share/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable\", \"state\": \"present\"}}, {\"name\": \"Add Kubernetes repository\", \"module\": \"apt_repository\", \"params\": {\"repo\": \"deb [signed-by=/usr/share/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/{{ apt_key_k8s }}/deb/ /\", \"state\": \"present\"}}, {\"name\": \"Update APT repository again\", \"module\": \"apt\", \"params\": {\"update_cache\": \"True\"}}, {\"name\": \"Install Kubernetes Package and containerd\", \"module\": \"apt\", \"params\": {\"name\": \"['kubelet={{ apt_k8s_version }}', 'kubeadm={{ apt_k8s_version }}', 'kubectl={{ apt_k8s_version }}', 'containerd.io={{ apt_cri_version }}']\", \"state\": \"present\"}}, {\"name\": \"Configure containerd default settings\", \"module\": \"shell\", \"params\": {\"cmd\": \"containerd config default > /etc/containerd/config.toml\"}}, {\"name\": \"Enable Systemd Cgroup in containerd\", \"module\": \"replace\", \"params\": {\"path\": \"/etc/containerd/config.toml\", \"regexp\": \"SystemdCgroup = false\", \"replace\": \"SystemdCgroup = true\"}}, {\"name\": \"Reload systemd daemon and restart containerd\", \"module\": \"systemd\", \"params\": {\"name\": \"containerd\", \"enabled\": \"True\", \"state\": \"restarted\", \"daemon_reload\": \"True\"}}]}"
+}
+INFO:     192.168.64.1:60352 - "POST /api/awx/launch HTTP/1.1" 200 OK
+INFO:     192.168.64.1:60352 - "GET /api/awx/oidc-redirect?job_url=http%3A%2F%2F192.168.64.26%3A30000%2F%23%2Fjobs%2Fplaybook%2F212%2Foutput HTTP/1.1" 200 OK
+WARNING:  WatchGodReload detected file change in '['/root/ansible-builder/ansible-builder/backend/database.py']'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1084553]
+/usr/local/lib/python3.6/site-packages/jose/backends/cryptography_backend.py:4: CryptographyDeprecationWarning: Python 3.6 is no longer supported by the Python core team. Therefore, support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.6.
+  from cryptography.exceptions import InvalidSignature, InvalidTag
+INFO:     Started server process [1214125]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchGodReload detected file change in '['/root/ansible-builder/ansible-builder/backend/main.py']'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1214125]
+✓ Keycloak SSO authentication enabled
+✓ AWX integration configured: http://192.168.64.26:30000
+✓ Frontend served from: ./../frontend/frontend/dist
+Database initialized successfully
+User authentication managed by Keycloak SSO
+/usr/local/lib/python3.6/site-packages/jose/backends/cryptography_backend.py:4: CryptographyDeprecationWarning: Python 3.6 is no longer supported by the Python core team. Therefore, support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.6.
+  from cryptography.exceptions import InvalidSignature, InvalidTag
+INFO:     Started server process [1216036]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchGodReload detected file change in '['/root/ansible-builder/ansible-builder/backend/main.py']'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1216036]
+✓ Keycloak SSO authentication enabled
+✓ AWX integration configured: http://192.168.64.26:30000
+✓ Frontend served from: ./../frontend/frontend/dist
+Database initialized successfully
+User authentication managed by Keycloak SSO
+/usr/local/lib/python3.6/site-packages/jose/backends/cryptography_backend.py:4: CryptographyDeprecationWarning: Python 3.6 is no longer supported by the Python core team. Therefore, support for it is deprecated in cryptography. The next release of cryptography will remove support for Python 3.6.
+  from cryptography.exceptions import InvalidSignature, InvalidTag
+INFO:     Started server process [1217406]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+✓ Keycloak SSO authentication enabled
+✓ AWX integration configured: http://192.168.64.26:30000
+✓ Frontend served from: ./../frontend/frontend/dist
+Database initialized successfully
+User authentication managed by Keycloak SSO
+INFO:     192.168.64.1:61110 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:61112 - "GET /assets/index-CYKnuC2s.js HTTP/1.1" 200 OK
+INFO:     192.168.64.1:61110 - "GET /assets/index-DuU424RQ.css HTTP/1.1" 200 OK
+INFO:     192.168.64.1:61112 - "GET /favicon.ico HTTP/1.1" 200 OK
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 1911, in _execute_context
+    cursor, statement, parameters, context
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/default.py", line 736, in do_execute
+    cursor.execute(statement, parameters)
+psycopg2.OperationalError: server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.6/site-packages/uvicorn/protocols/http/httptools_impl.py", line 376, in run_asgi
+    result = await app(self.scope, self.receive, self.send)
+  File "/usr/local/lib/python3.6/site-packages/uvicorn/middleware/proxy_headers.py", line 75, in __call__
+    return await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/applications.py", line 269, in __call__
+    await super().__call__(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/applications.py", line 124, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/errors.py", line 184, in __call__
+    raise exc
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/errors.py", line 162, in __call__
+    await self.app(scope, receive, _send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/cors.py", line 84, in __call__
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/exceptions.py", line 93, in __call__
+    raise exc
+  File "/usr/local/lib/python3.6/site-packages/starlette/exceptions.py", line 82, in __call__
+    await self.app(scope, receive, sender)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/middleware/asyncexitstack.py", line 21, in __call__
+    raise e
+  File "/usr/local/lib/python3.6/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 670, in __call__
+    await route.handle(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 266, in handle
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 65, in app
+    response = await func(request)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/routing.py", line 232, in app
+    dependant=dependant, values=values, is_coroutine=is_coroutine
+  File "/usr/local/lib/python3.6/site-packages/fastapi/routing.py", line 160, in run_endpoint_function
+    return await dependant.call(**values)
+  File "./main.py", line 241, in list_playbooks
+    playbooks = db.query(AnsibleBuilderPlaybook).all()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/query.py", line 2773, in all
+    return self._iter().all()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/query.py", line 2919, in _iter
+    execution_options={"_sa_orm_load_options": self.load_options},
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/session.py", line 1717, in execute
+    result = conn._execute_20(statement, params or {}, execution_options)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 1710, in _execute_20
+    return meth(self, args_10style, kwargs_10style, execution_options)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/sql/elements.py", line 335, in _execute_on_connection
+    self, multiparams, params, execution_options
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 1587, in _execute_clauseelement
+    cache_hit=cache_hit,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 1954, in _execute_context
+    e, statement, parameters, cursor, context
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 2135, in _handle_dbapi_exception
+    sqlalchemy_exception, with_traceback=exc_info[2], from_=e
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 1911, in _execute_context
+    cursor, statement, parameters, context
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/default.py", line 736, in do_execute
+    cursor.execute(statement, parameters)
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+
+[SQL: SELECT ansible_builder_playbooks.id AS ansible_builder_playbooks_id, ansible_builder_playbooks.name AS ansible_builder_playbooks_name, ansible_builder_playbooks.hosts AS ansible_builder_playbooks_hosts, ansible_builder_playbooks.become AS ansible_builder_playbooks_become, ansible_builder_playbooks.tasks AS ansible_builder_playbooks_tasks, ansible_builder_playbooks.owner_id AS ansible_builder_playbooks_owner_id, ansible_builder_playbooks.owner_username AS ansible_builder_playbooks_owner_username, ansible_builder_playbooks.created_at AS ansible_builder_playbooks_created_at, ansible_builder_playbooks.updated_at AS ansible_builder_playbooks_updated_at 
+FROM ansible_builder_playbooks]
+(Background on this error at: https://sqlalche.me/e/14/e3q8)
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3371, in _wrap_pool_connect
+    return fn()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 327, in connect
+    return _ConnectionFairy._checkout(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 894, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 498, in checkout
+    rec._checkin_failed(err, _fairy_was_created=False)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 495, in checkout
+    dbapi_connection = rec.get_connection()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 630, in get_connection
+    self.__connect()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 691, in __connect
+    pool.logger.debug("Error on connect(): %s", e)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 686, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/create.py", line 574, in connect
+    return dialect.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/default.py", line 598, in connect
+    return self.dbapi.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+psycopg2.OperationalError: connection to server at "awx-postgres-15.awx.svc.cluster.local" (172.19.102.158), port 5432 failed: Connection timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.6/site-packages/uvicorn/protocols/http/httptools_impl.py", line 376, in run_asgi
+    result = await app(self.scope, self.receive, self.send)
+  File "/usr/local/lib/python3.6/site-packages/uvicorn/middleware/proxy_headers.py", line 75, in __call__
+    return await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/applications.py", line 269, in __call__
+    await super().__call__(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/applications.py", line 124, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/errors.py", line 184, in __call__
+    raise exc
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/errors.py", line 162, in __call__
+    await self.app(scope, receive, _send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/cors.py", line 84, in __call__
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/exceptions.py", line 93, in __call__
+    raise exc
+  File "/usr/local/lib/python3.6/site-packages/starlette/exceptions.py", line 82, in __call__
+    await self.app(scope, receive, sender)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/middleware/asyncexitstack.py", line 21, in __call__
+    raise e
+  File "/usr/local/lib/python3.6/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 670, in __call__
+    await route.handle(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 266, in handle
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 65, in app
+    response = await func(request)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/routing.py", line 232, in app
+    dependant=dependant, values=values, is_coroutine=is_coroutine
+  File "/usr/local/lib/python3.6/site-packages/fastapi/routing.py", line 160, in run_endpoint_function
+    return await dependant.call(**values)
+  File "./main.py", line 363, in list_inventories
+    inventories = db.query(AnsibleBuilderInventory).all()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/query.py", line 2773, in all
+    return self._iter().all()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/query.py", line 2919, in _iter
+    execution_options={"_sa_orm_load_options": self.load_options},
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/session.py", line 1716, in execute
+    conn = self._connection_for_bind(bind)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/session.py", line 1556, in _connection_for_bind
+    engine, execution_options
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/session.py", line 750, in _connection_for_bind
+    conn = bind.connect()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3325, in connect
+    return self._connection_cls(self, close_with_result=close_with_result)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 96, in __init__
+    else engine.raw_connection()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3404, in raw_connection
+    return self._wrap_pool_connect(self.pool.connect, _connection)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3375, in _wrap_pool_connect
+    e, dialect, self
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 2209, in _handle_dbapi_exception_noconnection
+    sqlalchemy_exception, with_traceback=exc_info[2], from_=e
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3371, in _wrap_pool_connect
+    return fn()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 327, in connect
+    return _ConnectionFairy._checkout(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 894, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 498, in checkout
+    rec._checkin_failed(err, _fairy_was_created=False)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 495, in checkout
+    dbapi_connection = rec.get_connection()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 630, in get_connection
+    self.__connect()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 691, in __connect
+    pool.logger.debug("Error on connect(): %s", e)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 686, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/create.py", line 574, in connect
+    return dialect.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/default.py", line 598, in connect
+    return self.dbapi.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) connection to server at "awx-postgres-15.awx.svc.cluster.local" (172.19.102.158), port 5432 failed: Connection timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/14/e3q8)
+INFO:      - "GET / HTTP/1.1" 200 OK
+INFO:      - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:62201 - "GET / HTTP/1.1" 200 OK
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3371, in _wrap_pool_connect
+    return fn()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 327, in connect
+    return _ConnectionFairy._checkout(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 894, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 498, in checkout
+    rec._checkin_failed(err, _fairy_was_created=False)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 495, in checkout
+    dbapi_connection = rec.get_connection()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 630, in get_connection
+    self.__connect()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 691, in __connect
+    pool.logger.debug("Error on connect(): %s", e)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 686, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/create.py", line 574, in connect
+    return dialect.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/default.py", line 598, in connect
+    return self.dbapi.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+psycopg2.OperationalError: connection to server at "awx-postgres-15.awx.svc.cluster.local" (172.19.102.158), port 5432 failed: Connection timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.6/site-packages/uvicorn/protocols/http/httptools_impl.py", line 376, in run_asgi
+    result = await app(self.scope, self.receive, self.send)
+  File "/usr/local/lib/python3.6/site-packages/uvicorn/middleware/proxy_headers.py", line 75, in __call__
+    return await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/applications.py", line 269, in __call__
+    await super().__call__(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/applications.py", line 124, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/errors.py", line 184, in __call__
+    raise exc
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/errors.py", line 162, in __call__
+    await self.app(scope, receive, _send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/cors.py", line 84, in __call__
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/exceptions.py", line 93, in __call__
+    raise exc
+  File "/usr/local/lib/python3.6/site-packages/starlette/exceptions.py", line 82, in __call__
+    await self.app(scope, receive, sender)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/middleware/asyncexitstack.py", line 21, in __call__
+    raise e
+  File "/usr/local/lib/python3.6/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 670, in __call__
+    await route.handle(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 266, in handle
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 65, in app
+    response = await func(request)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/routing.py", line 232, in app
+    dependant=dependant, values=values, is_coroutine=is_coroutine
+  File "/usr/local/lib/python3.6/site-packages/fastapi/routing.py", line 160, in run_endpoint_function
+    return await dependant.call(**values)
+  File "./main.py", line 241, in list_playbooks
+    playbooks = db.query(AnsibleBuilderPlaybook).all()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/query.py", line 2773, in all
+    return self._iter().all()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/query.py", line 2919, in _iter
+    execution_options={"_sa_orm_load_options": self.load_options},
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/session.py", line 1716, in execute
+    conn = self._connection_for_bind(bind)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/session.py", line 1556, in _connection_for_bind
+    engine, execution_options
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/session.py", line 750, in _connection_for_bind
+    conn = bind.connect()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3325, in connect
+    return self._connection_cls(self, close_with_result=close_with_result)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 96, in __init__
+    else engine.raw_connection()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3404, in raw_connection
+    return self._wrap_pool_connect(self.pool.connect, _connection)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3375, in _wrap_pool_connect
+    e, dialect, self
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 2209, in _handle_dbapi_exception_noconnection
+    sqlalchemy_exception, with_traceback=exc_info[2], from_=e
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3371, in _wrap_pool_connect
+    return fn()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 327, in connect
+    return _ConnectionFairy._checkout(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 894, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 498, in checkout
+    rec._checkin_failed(err, _fairy_was_created=False)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 495, in checkout
+    dbapi_connection = rec.get_connection()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 630, in get_connection
+    self.__connect()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 691, in __connect
+    pool.logger.debug("Error on connect(): %s", e)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 686, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/create.py", line 574, in connect
+    return dialect.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/default.py", line 598, in connect
+    return self.dbapi.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) connection to server at "awx-postgres-15.awx.svc.cluster.local" (172.19.102.158), port 5432 failed: Connection timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/14/e3q8)
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3371, in _wrap_pool_connect
+    return fn()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 327, in connect
+    return _ConnectionFairy._checkout(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 894, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 498, in checkout
+    rec._checkin_failed(err, _fairy_was_created=False)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 495, in checkout
+    dbapi_connection = rec.get_connection()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 630, in get_connection
+    self.__connect()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 691, in __connect
+    pool.logger.debug("Error on connect(): %s", e)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 686, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/create.py", line 574, in connect
+    return dialect.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/default.py", line 598, in connect
+    return self.dbapi.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+psycopg2.OperationalError: connection to server at "awx-postgres-15.awx.svc.cluster.local" (172.19.102.158), port 5432 failed: Connection timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.6/site-packages/uvicorn/protocols/http/httptools_impl.py", line 376, in run_asgi
+    result = await app(self.scope, self.receive, self.send)
+  File "/usr/local/lib/python3.6/site-packages/uvicorn/middleware/proxy_headers.py", line 75, in __call__
+    return await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/applications.py", line 269, in __call__
+    await super().__call__(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/applications.py", line 124, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/errors.py", line 184, in __call__
+    raise exc
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/errors.py", line 162, in __call__
+    await self.app(scope, receive, _send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/cors.py", line 84, in __call__
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/exceptions.py", line 93, in __call__
+    raise exc
+  File "/usr/local/lib/python3.6/site-packages/starlette/exceptions.py", line 82, in __call__
+    await self.app(scope, receive, sender)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/middleware/asyncexitstack.py", line 21, in __call__
+    raise e
+  File "/usr/local/lib/python3.6/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 670, in __call__
+    await route.handle(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 266, in handle
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 65, in app
+    response = await func(request)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/routing.py", line 232, in app
+    dependant=dependant, values=values, is_coroutine=is_coroutine
+  File "/usr/local/lib/python3.6/site-packages/fastapi/routing.py", line 160, in run_endpoint_function
+    return await dependant.call(**values)
+  File "./main.py", line 363, in list_inventories
+    inventories = db.query(AnsibleBuilderInventory).all()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/query.py", line 2773, in all
+    return self._iter().all()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/query.py", line 2919, in _iter
+    execution_options={"_sa_orm_load_options": self.load_options},
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/session.py", line 1716, in execute
+    conn = self._connection_for_bind(bind)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/session.py", line 1556, in _connection_for_bind
+    engine, execution_options
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/session.py", line 750, in _connection_for_bind
+    conn = bind.connect()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3325, in connect
+    return self._connection_cls(self, close_with_result=close_with_result)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 96, in __init__
+    else engine.raw_connection()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3404, in raw_connection
+    return self._wrap_pool_connect(self.pool.connect, _connection)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3375, in _wrap_pool_connect
+    e, dialect, self
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 2209, in _handle_dbapi_exception_noconnection
+    sqlalchemy_exception, with_traceback=exc_info[2], from_=e
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3371, in _wrap_pool_connect
+    return fn()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 327, in connect
+    return _ConnectionFairy._checkout(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 894, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 498, in checkout
+    rec._checkin_failed(err, _fairy_was_created=False)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 495, in checkout
+    dbapi_connection = rec.get_connection()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 630, in get_connection
+    self.__connect()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 691, in __connect
+    pool.logger.debug("Error on connect(): %s", e)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 686, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/create.py", line 574, in connect
+    return dialect.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/default.py", line 598, in connect
+    return self.dbapi.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) connection to server at "awx-postgres-15.awx.svc.cluster.local" (172.19.102.158), port 5432 failed: Connection timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/14/e3q8)
+Error checking executor playbook: 
+INFO:     192.168.64.1:63487 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63534 - "GET / HTTP/1.1" 200 OK
+INFO:     192.168.64.1:63534 - "GET /api/playbooks HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3371, in _wrap_pool_connect
+    return fn()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 327, in connect
+    return _ConnectionFairy._checkout(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 894, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 498, in checkout
+    rec._checkin_failed(err, _fairy_was_created=False)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 495, in checkout
+    dbapi_connection = rec.get_connection()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 630, in get_connection
+    self.__connect()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 691, in __connect
+    pool.logger.debug("Error on connect(): %s", e)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 686, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/create.py", line 574, in connect
+    return dialect.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/default.py", line 598, in connect
+    return self.dbapi.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+psycopg2.OperationalError: connection to server at "awx-postgres-15.awx.svc.cluster.local" (172.19.102.158), port 5432 failed: Connection timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.6/site-packages/uvicorn/protocols/http/httptools_impl.py", line 376, in run_asgi
+    result = await app(self.scope, self.receive, self.send)
+  File "/usr/local/lib/python3.6/site-packages/uvicorn/middleware/proxy_headers.py", line 75, in __call__
+    return await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/applications.py", line 269, in __call__
+    await super().__call__(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/applications.py", line 124, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/errors.py", line 184, in __call__
+    raise exc
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/errors.py", line 162, in __call__
+    await self.app(scope, receive, _send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/middleware/cors.py", line 84, in __call__
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/exceptions.py", line 93, in __call__
+    raise exc
+  File "/usr/local/lib/python3.6/site-packages/starlette/exceptions.py", line 82, in __call__
+    await self.app(scope, receive, sender)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/middleware/asyncexitstack.py", line 21, in __call__
+    raise e
+  File "/usr/local/lib/python3.6/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 670, in __call__
+    await route.handle(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 266, in handle
+    await self.app(scope, receive, send)
+  File "/usr/local/lib/python3.6/site-packages/starlette/routing.py", line 65, in app
+    response = await func(request)
+  File "/usr/local/lib/python3.6/site-packages/fastapi/routing.py", line 232, in app
+    dependant=dependant, values=values, is_coroutine=is_coroutine
+  File "/usr/local/lib/python3.6/site-packages/fastapi/routing.py", line 160, in run_endpoint_function
+    return await dependant.call(**values)
+  File "./main.py", line 241, in list_playbooks
+    playbooks = db.query(AnsibleBuilderPlaybook).all()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/query.py", line 2773, in all
+    return self._iter().all()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/query.py", line 2919, in _iter
+    execution_options={"_sa_orm_load_options": self.load_options},
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/session.py", line 1716, in execute
+    conn = self._connection_for_bind(bind)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/session.py", line 1556, in _connection_for_bind
+    engine, execution_options
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/orm/session.py", line 750, in _connection_for_bind
+    conn = bind.connect()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3325, in connect
+    return self._connection_cls(self, close_with_result=close_with_result)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 96, in __init__
+    else engine.raw_connection()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3404, in raw_connection
+    return self._wrap_pool_connect(self.pool.connect, _connection)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3375, in _wrap_pool_connect
+    e, dialect, self
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 2209, in _handle_dbapi_exception_noconnection
+    sqlalchemy_exception, with_traceback=exc_info[2], from_=e
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/base.py", line 3371, in _wrap_pool_connect
+    return fn()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 327, in connect
+    return _ConnectionFairy._checkout(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 894, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 498, in checkout
+    rec._checkin_failed(err, _fairy_was_created=False)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 495, in checkout
+    dbapi_connection = rec.get_connection()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 630, in get_connection
+    self.__connect()
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 691, in __connect
+    pool.logger.debug("Error on connect(): %s", e)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/langhelpers.py", line 72, in __exit__
+    with_traceback=exc_tb,
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/util/compat.py", line 211, in raise_
+    raise exception
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/pool/base.py", line 686, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/create.py", line 574, in connect
+    return dialect.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/sqlalchemy/engine/default.py", line 598, in connect
+    return self.dbapi.connect(*cargs, **cparams)
+  File "/usr/local/lib64/python3.6/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) connection to server at "awx-postgres-15.awx.svc.cluster.local" (172.19.102.158), port 5432 failed: Connection timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/14/e3q8)
