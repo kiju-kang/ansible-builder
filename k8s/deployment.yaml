@@ -1,0 +1,83 @@
+# ==========================================
+# Ansible Builder - Kubernetes Deployment
+# Backend + Frontend 통합 배포
+# ==========================================
+# 사용법: kubectl apply -f deployment.yaml
+# 이미지 업데이트: kubectl set image deployment/ansible-backend backend=ansible-builder-backend:v18 -n awx
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ansible-backend
+  namespace: awx
+  labels:
+    app: ansible-builder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ansible-backend
+  template:
+    metadata:
+      labels:
+        app: ansible-backend
+    spec:
+      containers:
+      - name: backend
+        image: docker.io/library/ansible-builder-backend:v17
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+          name: http
+        
+        # ========================================
+        # 환경변수: ConfigMap에서 로드
+        # ========================================
+        envFrom:
+        - configMapRef:
+            name: ansible-builder-config
+        - secretRef:
+            name: ansible-builder-secret
+        
+        # ========================================
+        # 리소스 제한
+        # ========================================
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        
+        # ========================================
+        # 헬스 체크
+        # ========================================
+        livenessProbe:
+          httpGet:
+            path: /api/config
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /api/config
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+        
+        # ========================================
+        # 데이터 영속성 (SQLite DB)
+        # ========================================
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+      
+      volumes:
+      - name: data
+        emptyDir: {}
+        # 영속 스토리지 사용 시:
+        # persistentVolumeClaim:
+        #   claimName: ansible-builder-pvc

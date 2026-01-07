@@ -16,7 +16,7 @@ spec:
   projects_persistence: true
   projects_existing_claim: awx-projects-claim
   projects_storage_access_mode: ReadWriteMany
-  projects_storage_size: 8Gi
+  projects_storage_size: 2Gi
   
   postgres_storage_class: manual
   postgres_storage_requirements:

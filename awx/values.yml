@@ -1,0 +1,12 @@
+apiVersion: awx.ansible.com/v1beta1
+kind: AWX
+metadata:
+  name: awx
+  namespace: awx
+spec:
+  service_type: NodePort
+  nodeport_port: 30000
+  postgres_storage_class: manual
+  postgres_storage_requirements:
+    requests:
+      storage: 5Gi

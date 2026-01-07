@@ -1,0 +1,35 @@
+# ==========================================
+# Ansible Builder - Kubernetes ConfigMap
+# 비민감 환경변수 설정
+# ==========================================
+# 사용법: kubectl apply -f configmap.yaml
+# IP 변경 시: kubectl edit configmap ansible-builder-config -n awx
+# ==========================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ansible-builder-config
+  namespace: awx
+  labels:
+    app: ansible-builder
+data:
+  # ========================================
+  # Keycloak SSO 설정
+  # ========================================
+  KEYCLOAK_SERVER_URL: "http://192.168.64.26:30002"
+  KEYCLOAK_REALM: "ansible-realm"
+  KEYCLOAK_CLIENT_ID: "ansible-builder-client"
+  
+  # ========================================
+  # AWX 설정
+  # ========================================
+  AWX_URL: "http://192.168.64.26:30000"
+  
+  # ========================================
+  # 애플리케이션 설정
+  # ========================================
+  APP_TITLE: "Ansible 작업 생성기"
+  APP_ENV: "production"
+  
+  # Database (SQLite 사용 시)
+  DATABASE_URL: "sqlite:///./ansible_builder.db"
