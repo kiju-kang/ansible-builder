@@ -115,6 +115,32 @@ async def get_frontend_config():
     }
 
 
+# ============================================
+# External API Proxy (CORS 우회)
+# ============================================
+
+@app.post("/api/proxy/inventory/list")
+async def proxy_inventory_list():
+    """
+    외부 API(10.2.14.54:8081) CORS 우회를 위한 프록시 엔드포인트
+    Frontend에서 직접 외부 API 호출 시 CORS 에러 발생하므로 Backend를 경유
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "http://10.2.14.54:8081/ext/api/inventory/list",
+                json={},
+                headers={"Content-Type": "application/json"}
+            )
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="External API request timeout")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"External API connection failed: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+
+
 # Playbook CRUD (DB 사용)
 def log_action(db, user, action, resource_type, resource_id, description, ip_address=None):
     """Audit logging stub - logs actions to console"""

@@ -28,6 +28,13 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute, onNa
   const [creatingTemplate, setCreatingTemplate] = useState(false);
   const [executorStatus, setExecutorStatus] = useState(null);
 
+  // API 인벤토리 모달 상태
+  const [showApiModal, setShowApiModal] = useState(false);
+  const [apiInventoryList, setApiInventoryList] = useState([]);
+  const [loadingApiInventory, setLoadingApiInventory] = useState(false);
+  const [selectedApiItems, setSelectedApiItems] = useState([]);
+  const [apiSearchTerm, setApiSearchTerm] = useState('');
+
   // 환경 변경 시 AWX URL 업데이트
   useEffect(() => {
     const newUrl = selectedEnv === 'dev' ? AWX_DEV_URL : AWX_PROD_URL;
@@ -141,6 +148,53 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute, onNa
       alert('❌ 외부 Inventory 불러오기 실패: ' + err.message);
     } finally {
       setLoadingExternal(false);
+    }
+  };
+
+  // 외부 API에서 인벤토리 목록 불러오기
+  const loadApiInventories = async () => {
+    setLoadingApiInventory(true);
+    setShowApiModal(true);
+    try {
+      const res = await fetch(`${API_URL}/proxy/inventory/list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      setApiInventoryList(Array.isArray(data) ? data : data.data || data.list || data.items || []);
+    } catch (err) {
+      alert('❌ API 인벤토리 불러오기 실패: ' + err.message);
+      setApiInventoryList([]);
+    } finally {
+      setLoadingApiInventory(false);
+    }
+  };
+
+  // 선택한 API 인벤토리를 작업대상으로 저장
+  const saveSelectedApiInventory = async (item) => {
+    try {
+      // 선택한 항목을 INI 형식으로 변환
+      const inventoryContent = item.hosts
+        ? (Array.isArray(item.hosts) ? item.hosts.join('\n') : item.hosts)
+        : `[${item.name || 'ungrouped'}]\n${item.ip || item.host || item.address || ''}`;
+
+      const res = await fetch(`${API_URL}/inventories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: item.name || item.id || 'API-Import-' + Date.now(),
+          content: inventoryContent
+        })
+      });
+      const saved = await res.json();
+      alert(`✅ 작업대상 저장됨: ${saved.name} (ID: ${saved.id})`);
+      setShowApiModal(false);
+      setSelectedApiItems([]);
+      // 인벤토리 목록 새로고침
+      window.location.reload();
+    } catch (err) {
+      alert('❌ 작업대상 저장 실패: ' + err.message);
     }
   };
 
@@ -259,7 +313,7 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute, onNa
                   className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
                 >
                   <Plus size={14} />
-                  Playbook 생성
+                  작업 생성
                 </button>
               )}
             </div>
@@ -277,67 +331,16 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute, onNa
 
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">작업 대상 선택</label>
-
-            {/* Inventory Source Toggle */}
-            <div className="flex gap-2 mb-3">
-              <button
-                onClick={() => setInventorySource('local')}
-                className={`flex-1 px-3 py-2 rounded flex items-center justify-center gap-2 text-sm ${inventorySource === 'local'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-              >
-                <Database size={16} />
-                생성한 Inventory
-              </button>
-              <button
-                onClick={() => setInventorySource('external')}
-                className={`flex-1 px-3 py-2 rounded flex items-center justify-center gap-2 text-sm ${inventorySource === 'external'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-              >
-                <ExternalLink size={16} />
-                외부 API에서 불러오기
-              </button>
-            </div>
-
-            {inventorySource === 'local' ? (
-              <select
-                value={selectedInventory || ''}
-                onChange={(e) => setSelectedInventory(e.target.value)}
-                className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="">-- 작업대상 선택 --</option>
-                {inventories.map(inv => (
-                  <option key={inv.id} value={inv.id}>{inv.name} (ID: {inv.id})</option>
-                ))}
-              </select>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <select
-                    value={selectedInventory || ''}
-                    onChange={(e) => setSelectedInventory(e.target.value)}
-                    className="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  >
-                    <option value="">-- 외부 작업대상 선택 --</option>
-                    {externalInventories.map(inv => (
-                      <option key={inv.id} value={inv.id}>{inv.name}</option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={loadExternalInventories}
-                    disabled={loadingExternal}
-                    className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 flex items-center gap-2"
-                  >
-                    {loadingExternal ? <Loader className="animate-spin" size={16} /> : <RefreshCw size={16} />}
-                    불러오기
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500">AWX URL 입력 후 외부 Inventory를 불러올 수 있습니다</p>
-              </div>
-            )}
+            <select
+              value={selectedInventory || ''}
+              onChange={(e) => setSelectedInventory(e.target.value)}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            >
+              <option value="">-- 작업대상 선택 --</option>
+              {inventories.map(inv => (
+                <option key={inv.id} value={inv.id}>{inv.name} (ID: {inv.id})</option>
+              ))}
+            </select>
           </div>
 
           <button
@@ -413,8 +416,8 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute, onNa
               <button
                 onClick={() => setSelectedEnv('dev')}
                 className={`flex-1 px-4 py-3 rounded-lg text-center font-medium transition ${selectedEnv === 'dev'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
               >
                 🔧 개발
@@ -422,8 +425,8 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute, onNa
               <button
                 onClick={() => setSelectedEnv('prod')}
                 className={`flex-1 px-4 py-3 rounded-lg text-center font-medium transition ${selectedEnv === 'prod'
-                    ? 'bg-orange-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-orange-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
               >
                 🚀 운영
@@ -443,7 +446,7 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute, onNa
                   className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
                 >
                   <Plus size={14} />
-                  Playbook 생성
+                  작업 생성
                 </button>
               )}
             </div>
@@ -462,65 +465,26 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute, onNa
           <div className="mb-6">
             <label className="block text-sm font-medium mb-2">작업 대상 선택</label>
 
-            {/* Inventory Source Toggle */}
             <div className="flex gap-2 mb-3">
-              <button
-                onClick={() => setInventorySource('local')}
-                className={`flex-1 px-3 py-2 rounded flex items-center justify-center gap-2 text-sm ${inventorySource === 'local'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-              >
-                <Database size={16} />
-                생성한 Inventory
-              </button>
-              <button
-                onClick={() => setInventorySource('external')}
-                className={`flex-1 px-3 py-2 rounded flex items-center justify-center gap-2 text-sm ${inventorySource === 'external'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-              >
-                <ExternalLink size={16} />
-                AWX에서 불러오기
-              </button>
-            </div>
-
-            {inventorySource === 'local' ? (
               <select
                 value={selectedInventory || ''}
                 onChange={(e) => setSelectedInventory(e.target.value)}
-                className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
                 <option value="">-- 작업대상 선택 --</option>
                 {inventories.map(inv => (
                   <option key={inv.id} value={inv.id}>{inv.name} (ID: {inv.id})</option>
                 ))}
               </select>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <select
-                    value={selectedInventory || ''}
-                    onChange={(e) => setSelectedInventory(e.target.value)}
-                    className="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  >
-                    <option value="">-- GAIA 작업대상 선택 --</option>
-                    {externalInventories.map(inv => (
-                      <option key={inv.id} value={inv.id}>{inv.name}</option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={loadExternalInventories}
-                    disabled={loadingExternal}
-                    className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 flex items-center gap-2"
-                  >
-                    {loadingExternal ? <Loader className="animate-spin" size={16} /> : <RefreshCw size={16} />}
-                    불러오기
-                  </button>
-                </div>
-              </div>
-            )}
+              <button
+                onClick={loadApiInventories}
+                disabled={loadingApiInventory}
+                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center gap-2"
+              >
+                {loadingApiInventory ? <Loader className="animate-spin" size={16} /> : <ExternalLink size={16} />}
+                API로 불러오기
+              </button>
+            </div>
           </div>
 
           <div className="mb-6 pb-6 border-b">
@@ -594,6 +558,104 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute, onNa
               <li>"AWX에 Job 템플릿 생성" 클릭하여 자동 생성</li>
               <li>또는 기존 템플릿 선택 후 "AWX에서 Job 실행" 클릭</li>
             </ol>
+          </div>
+        </div>
+      )}
+
+      {/* API 인벤토리 선택 모달 */}
+      {showApiModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold">API 인벤토리 선택</h3>
+              <button
+                onClick={() => setShowApiModal(false)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            {loadingApiInventory ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader className="animate-spin mr-2" size={24} />
+                <span>API에서 인벤토리 목록을 불러오는 중...</span>
+              </div>
+            ) : apiInventoryList.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <p>불러올 인벤토리가 없습니다.</p>
+                <p className="text-sm mt-2">API 서버 연결을 확인하세요.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {/* 검색 입력창 */}
+                <div className="mb-4">
+                  <input
+                    type="text"
+                    placeholder="호스트명, IP, Zone으로 검색..."
+                    value={apiSearchTerm}
+                    onChange={(e) => setApiSearchTerm(e.target.value)}
+                    className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                  />
+                </div>
+                {(() => {
+                  const searchLower = apiSearchTerm.toLowerCase();
+                  const filteredList = apiSearchTerm.trim() === ''
+                    ? apiInventoryList
+                    : apiInventoryList.filter(item => {
+                      const hostNm = (item.host_nm || item.name || '').toLowerCase();
+                      const mgmtIp = (item.mgmt_ip || item.ip || '');
+                      const zone = (item.zone || '').toLowerCase();
+                      const hostGroup = (item.host_group_nm || '').toLowerCase();
+                      return hostNm.includes(searchLower) ||
+                        mgmtIp.includes(apiSearchTerm) ||
+                        zone.includes(searchLower) ||
+                        hostGroup.includes(searchLower);
+                    });
+                  const displayList = filteredList.slice(0, 100);
+
+                  return (
+                    <>
+                      <p className="text-sm text-gray-600 mb-4">
+                        검색 결과: {filteredList.length}개 중 {displayList.length}개 표시 / 전체 {apiInventoryList.length}개
+                      </p>
+                      {displayList.map((item, index) => (
+                        <div
+                          key={item.id || item.equnr || index}
+                          className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition flex justify-between items-center"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{item.host_nm || item.name || item.id || `항목 ${index + 1}`}</p>
+                            {(item.mgmt_ip || item.ip) && (
+                              <p className="text-sm text-gray-500">IP: {item.mgmt_ip || item.ip}</p>
+                            )}
+                            {item.zone && <p className="text-sm text-gray-500">Zone: {item.zone}</p>}
+                            {item.host_group_nm && (
+                              <p className="text-sm text-gray-400 truncate">{item.host_group_nm}</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => saveSelectedApiInventory(item)}
+                            className="ml-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm flex-shrink-0"
+                          >
+                            저장
+                          </button>
+                        </div>
+                      ))}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setShowApiModal(false)}
+                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}

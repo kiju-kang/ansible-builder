@@ -72,7 +72,7 @@ export default function PlaybookList({ playbooks, onEdit, onDelete, onRefresh, o
               <div className="flex justify-between items-start">
                 <div className="flex-1 cursor-pointer" onClick={() => loadPlaybookDetail(pb.id)}>
                   <h3 className="font-bold text-lg">{pb.name}</h3>
-                  <p className="text-sm text-gray-600">대상 호스트: {pb.hosts} | 작업: {pb.tasks.length}개</p>
+                  <p className="text-sm text-gray-600">작업 대상: {pb.hosts} | 작업: {pb.tasks.length}개</p>
                   <p className="text-xs text-gray-500">ID: {pb.id}</p>
                 </div>
                 <div className="flex gap-2">
@@ -111,7 +111,7 @@ export default function PlaybookList({ playbooks, onEdit, onDelete, onRefresh, o
       {viewingPlaybook && (
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold">플레이북 상세</h2>
+            <h2 className="text-2xl font-bold">작업 상세</h2>
             <button
               onClick={() => setViewingPlaybook(null)}
               className="text-gray-500 hover:text-gray-700 text-2xl"
@@ -124,7 +124,7 @@ export default function PlaybookList({ playbooks, onEdit, onDelete, onRefresh, o
             <h3 className="font-bold text-lg">{viewingPlaybook.name}</h3>
             <div className="text-sm text-gray-600 space-y-1">
               <p><strong>ID:</strong> {viewingPlaybook.id}</p>
-              <p><strong>대상 호스트:</strong> {viewingPlaybook.hosts}</p>
+              <p><strong>작업 대상:</strong> {viewingPlaybook.hosts}</p>
               <p><strong>권한 상승:</strong> {viewingPlaybook.become ? '예' : '아니오'}</p>
               <p><strong>생성일:</strong> {new Date(viewingPlaybook.created_at).toLocaleString()}</p>
             </div>
@@ -160,7 +160,7 @@ export default function PlaybookList({ playbooks, onEdit, onDelete, onRefresh, o
               onClick={() => handleEdit(viewingPlaybook)}
               className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
             >
-              이 플레이북 수정
+              이 작업 수정
             </button>
             <button
               onClick={() => setViewingPlaybook(null)}

@@ -49,10 +49,10 @@ export default function InventoryManager({ inventories, onRefresh }) {
         body: JSON.stringify(invToSave)
       });
       const saved = await res.json();
-      alert(`✅ 인벤토리 저장됨: ${saved.name} (ID: ${saved.id})`);
+      alert(`✅ 작업대상 저장됨: ${saved.name} (ID: ${saved.id})`);
       if (onRefresh) onRefresh();
     } catch (err) {
-      alert('❌ 인벤토리 저장 실패');
+      alert('❌ 작업대상 저장 실패');
     }
   };
 
@@ -192,7 +192,7 @@ export default function InventoryManager({ inventories, onRefresh }) {
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">인벤토리 이름</label>
+            <label className="block text-sm font-medium mb-2">작업대상 이름</label>
             <input
               type="text"
               value={inventory.name}
@@ -315,7 +315,7 @@ export default function InventoryManager({ inventories, onRefresh }) {
                 onClick={() => saveInventory(true)}
                 className="w-full mt-6 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium shadow-lg"
               >
-                💾 인벤토리 저장
+                💾 작업대상 저장
               </button>
             </div>
           ) : (
@@ -331,12 +331,12 @@ export default function InventoryManager({ inventories, onRefresh }) {
                 onClick={() => saveInventory(false)}
                 className="mt-4 w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
               >
-                💾 인벤토리 저장
+                💾 작업대상 저장
               </button>
             </div>
           )}
 
-          <h3 className="text-xl font-semibold mt-8 mb-4">저장된 인벤토리</h3>
+          <h3 className="text-xl font-semibold mt-8 mb-4">저장된 작업대상</h3>
           <div className="space-y-2">
             {inventories.map(inv => (
               <div key={inv.id} className="p-4 border rounded hover:bg-gray-50 transition">
@@ -363,7 +363,7 @@ export default function InventoryManager({ inventories, onRefresh }) {
               </div>
             ))}
             {inventories.length === 0 && (
-              <p className="text-gray-500 text-center py-8">저장된 인벤토리가 없습니다</p>
+              <p className="text-gray-500 text-center py-8">저장된 작업대상이 없습니다</p>
             )}
           </div>
         </div>
@@ -404,7 +404,7 @@ export default function InventoryManager({ inventories, onRefresh }) {
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">인벤토리 이름 (선택사항)</label>
+              <label className="block text-sm font-medium mb-2">작업대상 이름 (선택사항)</label>
               <input
                 type="text"
                 value={importName}

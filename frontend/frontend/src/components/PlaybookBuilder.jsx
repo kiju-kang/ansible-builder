@@ -99,6 +99,21 @@ const moduleTemplates = {
   }
 };
 
+// 모듈별 필수 파라미터 정의
+const requiredParams = {
+  'apt': ['name'],
+  'yum': ['name'],
+  'copy': ['dest'],
+  'file': ['path'],
+  'service': ['name'],
+  'command': ['cmd'],
+  'shell': ['cmd'],
+  'template': ['src', 'dest'],
+  'user': ['name'],
+  'git': ['repo', 'dest'],
+  'package': ['name']
+};
+
 // Parameter field types and options
 const parameterFieldTypes = {
   'apt': {
@@ -591,7 +606,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-2xl font-bold">
-              {isEditMode ? `✏️ 수정: ${playbook.name}` : '플레이북 생성기'}
+              {isEditMode ? `✏️ 수정: ${playbook.name}` : '작업 생성기'}
             </h2>
             {isEditMode && (
               <p className="text-sm text-gray-600 mt-1">
@@ -634,7 +649,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
                       className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
                     >
                       <Upload size={16} />
-                      YAML/Script 가져오기
+                      YAML 가져오기
                     </button>
                     <button
                       onClick={() => {
@@ -644,7 +659,28 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
                       className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
                     >
                       <FileText size={16} />
-                      YAML/Script 붙여넣기
+                      YAML 붙여넣기
+                    </button>
+                    <div className="border-t my-1"></div>
+                    <button
+                      onClick={() => {
+                        scriptFileRef.current?.click();
+                        setShowHamburgerMenu(false);
+                      }}
+                      className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    >
+                      <Upload size={16} />
+                      Script 가져오기
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowScriptModal(true);
+                        setShowHamburgerMenu(false);
+                      }}
+                      className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    >
+                      <FileText size={16} />
+                      Script 붙여넣기
                     </button>
                   </div>
                 </div>
@@ -655,17 +691,15 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
             <input
               ref={yamlFileRef}
               type="file"
-              accept=".yml,.yaml,.sh,.bash,.zsh"
-              onChange={(e) => {
-                const file = e.target.files[0];
-                if (file) {
-                  if (file.name.endsWith('.yml') || file.name.endsWith('.yaml')) {
-                    importYamlFile(e);
-                  } else {
-                    importScriptFile(e);
-                  }
-                }
-              }}
+              accept=".yml,.yaml"
+              onChange={importYamlFile}
+              className="hidden"
+            />
+            <input
+              ref={scriptFileRef}
+              type="file"
+              accept=".sh,.bash,.zsh"
+              onChange={importScriptFile}
               className="hidden"
             />
           </div>
@@ -675,7 +709,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div>
-            <label className="block text-sm font-medium mb-2">플레이북 이름</label>
+            <label className="block text-sm font-medium mb-2">작업 이름</label>
             <input
               type="text"
               value={playbook.name}
@@ -684,7 +718,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">대상 호스트</label>
+            <label className="block text-sm font-medium mb-2">작업 대상</label>
             <input
               type="text"
               value={playbook.hosts}
@@ -754,6 +788,9 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
                     <div key={param}>
                       <label className="block text-sm font-medium mb-2 capitalize">
                         {param.replace(/_/g, ' ')}
+                        {requiredParams[task.module]?.includes(param) && (
+                          <span className="text-red-500 ml-1">*</span>
+                        )}
                       </label>
                       {isSelect ? (
                         <select
@@ -872,7 +909,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">플레이북 이름 (선택사항)</label>
+              <label className="block text-sm font-medium mb-2">작업 이름 (선택사항)</label>
               <input
                 type="text"
                 value={scriptName}
