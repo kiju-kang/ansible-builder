@@ -1,3 +1,10 @@
 venv/
 __pycache__/
 .git/
+lib/
+*.tar
+*.log
+*.backup
+*.pyc
+.env
+.DS_Store

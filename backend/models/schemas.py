@@ -11,10 +11,29 @@ class YamlTextImport(BaseModel):
 
 
 class Task(BaseModel):
-    """Ansible task model"""
+    """Ansible task model with all supported attributes"""
     name: str
     module: str
     params: Dict[str, str]
+    # Optional Ansible task attributes
+    loop: Optional[List] = None
+    become: Optional[bool] = None
+    when: Optional[str] = None
+    delegate_to: Optional[str] = None
+    register: Optional[str] = None
+    ignore_errors: Optional[bool] = None
+    failed_when: Optional[str] = None
+    changed_when: Optional[str] = None
+    run_once: Optional[bool] = None
+    retries: Optional[int] = None
+    until: Optional[str] = None
+    delay: Optional[int] = None
+    notify: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+    environment: Optional[Dict] = None
+    vars: Optional[Dict] = None
+    no_log: Optional[bool] = None
+    loop_control: Optional[Dict] = None
 
 
 class Playbook(BaseModel):

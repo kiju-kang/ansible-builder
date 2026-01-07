@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Upload, FileText, Eye, Edit } from 'lucide-react';
 
-const API_URL = '/api';
+// 환경 변수에서 API URL 읽기 (Vite: import.meta.env)
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export default function InventoryManager({ inventories, onRefresh }) {
   const [inventory, setInventory] = useState({
-    name: 'My Inventory',
+    name: '내 인벤토리',
     content: '[webservers]\n192.168.1.10 ansible_user=ubuntu\n\n[dbservers]\n192.168.1.20 ansible_user=root'
   });
 
@@ -40,7 +41,7 @@ export default function InventoryManager({ inventories, onRefresh }) {
 
   const saveInventory = async (fromVisual = false) => {
     const invToSave = fromVisual ? { ...inventory, content: generateInventoryContent() } : inventory;
-    
+
     try {
       const res = await fetch(`${API_URL}/inventories`, {
         method: 'POST',
@@ -48,22 +49,22 @@ export default function InventoryManager({ inventories, onRefresh }) {
         body: JSON.stringify(invToSave)
       });
       const saved = await res.json();
-      alert(`✅ Inventory saved: ${saved.name} (ID: ${saved.id})`);
+      alert(`✅ 인벤토리 저장됨: ${saved.name} (ID: ${saved.id})`);
       if (onRefresh) onRefresh();
     } catch (err) {
-      alert('❌ Failed to save inventory');
+      alert('❌ 인벤토리 저장 실패');
     }
   };
 
   const deleteInventory = async (id) => {
-    if (!confirm('Delete this inventory?')) return;
+    if (!confirm('이 인벤토리를 삭제하시겠습니까?')) return;
     try {
       await fetch(`${API_URL}/inventories/${id}`, { method: 'DELETE' });
-      alert('✅ Inventory deleted');
+      alert('✅ 인벤토리 삭제됨');
       if (onRefresh) onRefresh();
       if (viewingInventory?.id === id) setViewingInventory(null);
     } catch (err) {
-      alert('❌ Failed to delete inventory');
+      alert('❌ 인벤토리 삭제 실패');
     }
   };
 
@@ -116,30 +117,30 @@ export default function InventoryManager({ inventories, onRefresh }) {
     const formData = new FormData();
     formData.append('file', file);
 
-    const endpoint = file.name.endsWith('.csv') 
+    const endpoint = file.name.endsWith('.csv')
       ? `${API_URL}/inventories/import-csv`
       : `${API_URL}/inventories/import`;
 
     try {
       const res = await fetch(endpoint, { method: 'POST', body: formData });
       const result = await res.json();
-      
+
       if (result.status === 'success') {
-        alert(`✅ Inventory imported!\n\nName: ${result.inventory_name}\nHosts: ${result.host_count}`);
+        alert(`✅ 인벤토리 가져오기 완료!\n\n이름: ${result.inventory_name}\n호스트: ${result.host_count}개`);
         if (onRefresh) onRefresh();
       } else {
-        alert('❌ Failed to import: ' + result.detail);
+        alert('❌ 가져오기 실패: ' + result.detail);
       }
     } catch (err) {
-      alert('❌ Import failed: ' + err.message);
+      alert('❌ 가져오기 실패: ' + err.message);
     }
-    
+
     event.target.value = '';
   };
 
   const importInventoryText = async () => {
     if (!importText.trim()) {
-      alert('Please enter inventory content');
+      alert('인벤토리 내용을 입력해주세요');
       return;
     }
 
@@ -153,18 +154,18 @@ export default function InventoryManager({ inventories, onRefresh }) {
         })
       });
       const result = await res.json();
-      
+
       if (result.status === 'success') {
-        alert(`✅ Inventory imported!\n\nName: ${result.inventory_name}\nHosts: ${result.host_count}`);
+        alert(`✅ 인벤토리 가져오기 완료!\n\n이름: ${result.inventory_name}\n호스트: ${result.host_count}개`);
         setShowImportModal(false);
         setImportText('');
         setImportName('');
         if (onRefresh) onRefresh();
       } else {
-        alert('❌ Failed to import: ' + result.detail);
+        alert('❌ 가져오기 실패: ' + result.detail);
       }
     } catch (err) {
-      alert('❌ Import failed: ' + err.message);
+      alert('❌ 가져오기 실패: ' + err.message);
     }
   };
 
@@ -173,30 +174,30 @@ export default function InventoryManager({ inventories, onRefresh }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold">Inventory Manager</h2>
+            <h2 className="text-2xl font-bold">작업 대상 관리</h2>
             <div className="flex gap-2">
-              <label className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 cursor-pointer">
+              <label className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 cursor-pointer">
                 <Upload size={20} />
-                Import File
+                파일 가져오기
                 <input type="file" accept=".ini,.txt,.csv" onChange={importInventoryFile} className="hidden" />
               </label>
-              <button 
-                onClick={() => setShowImportModal(true)} 
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
               >
                 <FileText size={20} />
-                Paste Text
+                텍스트 붙여넣기
               </button>
             </div>
           </div>
-          
+
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">Inventory Name</label>
-            <input 
-              type="text" 
-              value={inventory.name} 
-              onChange={(e) => setInventory({ ...inventory, name: e.target.value })} 
-              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none" 
+            <label className="block text-sm font-medium mb-2">인벤토리 이름</label>
+            <input
+              type="text"
+              value={inventory.name}
+              onChange={(e) => setInventory({ ...inventory, name: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
           </div>
 
@@ -205,7 +206,7 @@ export default function InventoryManager({ inventories, onRefresh }) {
               onClick={() => setUseVisualEditor(true)}
               className={`px-6 py-2 rounded-t font-medium ${useVisualEditor ? 'bg-blue-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
             >
-              📝 Visual Editor
+              📝 시각적 편집기
             </button>
             <button
               onClick={() => {
@@ -216,7 +217,7 @@ export default function InventoryManager({ inventories, onRefresh }) {
               }}
               className={`px-6 py-2 rounded-t font-medium ${!useVisualEditor ? 'bg-blue-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
             >
-              📄 Text Editor
+              📄 텍스트 편집기
             </button>
           </div>
 
@@ -232,13 +233,13 @@ export default function InventoryManager({ inventories, onRefresh }) {
                         value={group.name}
                         onChange={(e) => updateGroupName(groupIndex, e.target.value)}
                         className="text-lg font-semibold px-3 py-1 border-2 border-blue-300 rounded focus:border-blue-500 focus:outline-none"
-                        placeholder="Group name"
+                        placeholder="그룹 이름"
                       />
                     </div>
                     <button
                       onClick={() => removeInventoryGroup(groupIndex)}
                       className="p-2 text-red-600 hover:bg-red-50 rounded-full"
-                      title="Delete group"
+                      title="그룹 삭제"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -246,10 +247,10 @@ export default function InventoryManager({ inventories, onRefresh }) {
 
                   <div className="space-y-2 ml-6">
                     <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-gray-600 mb-1">
-                      <div className="col-span-3">Hostname/IP</div>
-                      <div className="col-span-3">User</div>
-                      <div className="col-span-2">Port</div>
-                      <div className="col-span-3">Connection</div>
+                      <div className="col-span-3">호스트명/IP</div>
+                      <div className="col-span-3">사용자</div>
+                      <div className="col-span-2">포트</div>
+                      <div className="col-span-3">연결 방식</div>
                       <div className="col-span-1"></div>
                     </div>
                     {group.hosts.map((host, hostIndex) => (
@@ -297,7 +298,7 @@ export default function InventoryManager({ inventories, onRefresh }) {
                     className="mt-3 ml-6 text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
                   >
                     <Plus size={16} />
-                    Add Host to {group.name}
+                    {group.name}에 호스트 추가
                   </button>
                 </div>
               ))}
@@ -307,35 +308,35 @@ export default function InventoryManager({ inventories, onRefresh }) {
                 className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 hover:text-blue-600 flex items-center justify-center gap-2 font-medium transition"
               >
                 <Plus size={20} />
-                Add New Group
+                새 그룹 추가
               </button>
 
               <button
                 onClick={() => saveInventory(true)}
                 className="w-full mt-6 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium shadow-lg"
               >
-                💾 Save Inventory
+                💾 인벤토리 저장
               </button>
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-medium mb-2">Inventory Content (INI format)</label>
+              <label className="block text-sm font-medium mb-2">인벤토리 내용 (INI 형식)</label>
               <textarea
                 value={inventory.content}
                 onChange={(e) => setInventory({ ...inventory, content: e.target.value })}
                 rows={12}
                 className="w-full px-3 py-2 border rounded font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
-              <button 
-                onClick={() => saveInventory(false)} 
+              <button
+                onClick={() => saveInventory(false)}
                 className="mt-4 w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
               >
-                💾 Save Inventory
+                💾 인벤토리 저장
               </button>
             </div>
           )}
 
-          <h3 className="text-xl font-semibold mt-8 mb-4">Saved Inventories</h3>
+          <h3 className="text-xl font-semibold mt-8 mb-4">저장된 인벤토리</h3>
           <div className="space-y-2">
             {inventories.map(inv => (
               <div key={inv.id} className="p-4 border rounded hover:bg-gray-50 transition">
@@ -345,14 +346,14 @@ export default function InventoryManager({ inventories, onRefresh }) {
                     <p className="text-sm text-gray-600">ID: {inv.id}</p>
                   </div>
                   <div className="flex gap-2">
-                    <button 
-                      onClick={() => loadInventoryDetail(inv.id)} 
+                    <button
+                      onClick={() => loadInventoryDetail(inv.id)}
                       className="p-2 text-blue-600 hover:bg-blue-50 rounded"
                     >
                       <Eye size={18} />
                     </button>
-                    <button 
-                      onClick={() => deleteInventory(inv.id)} 
+                    <button
+                      onClick={() => deleteInventory(inv.id)}
                       className="p-2 text-red-600 hover:bg-red-50 rounded"
                     >
                       <Trash2 size={18} />
@@ -362,7 +363,7 @@ export default function InventoryManager({ inventories, onRefresh }) {
               </div>
             ))}
             {inventories.length === 0 && (
-              <p className="text-gray-500 text-center py-8">No saved inventories</p>
+              <p className="text-gray-500 text-center py-8">저장된 인벤토리가 없습니다</p>
             )}
           </div>
         </div>
@@ -370,9 +371,9 @@ export default function InventoryManager({ inventories, onRefresh }) {
         {viewingInventory && (
           <div className="bg-white rounded-lg shadow-lg p-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Inventory Detail</h2>
-              <button 
-                onClick={() => setViewingInventory(null)} 
+              <h2 className="text-2xl font-bold">인벤토리 상세</h2>
+              <button
+                onClick={() => setViewingInventory(null)}
                 className="text-gray-500 hover:text-gray-700 text-2xl"
               >
                 ✕
@@ -381,10 +382,10 @@ export default function InventoryManager({ inventories, onRefresh }) {
             <div className="mb-4">
               <h3 className="font-bold text-lg">{viewingInventory.name}</h3>
               <p className="text-sm text-gray-600">ID: {viewingInventory.id}</p>
-              <p className="text-sm text-gray-600">Created: {new Date(viewingInventory.created_at).toLocaleString()}</p>
+              <p className="text-sm text-gray-600">생성일: {new Date(viewingInventory.created_at).toLocaleString()}</p>
             </div>
             <div>
-              <h4 className="font-semibold mb-2">Content</h4>
+              <h4 className="font-semibold mb-2">내용</h4>
               <pre className="bg-gray-900 text-green-400 p-4 rounded overflow-x-auto text-sm whitespace-pre-wrap font-mono">
                 {viewingInventory.content}
               </pre>
@@ -398,23 +399,23 @@ export default function InventoryManager({ inventories, onRefresh }) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[85vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-2xl font-bold">Import Inventory</h3>
+              <h3 className="text-2xl font-bold">인벤토리 가져오기</h3>
               <button onClick={() => setShowImportModal(false)} className="text-gray-500 hover:text-gray-700 text-3xl">×</button>
             </div>
-            
+
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Inventory Name (Optional)</label>
+              <label className="block text-sm font-medium mb-2">인벤토리 이름 (선택사항)</label>
               <input
                 type="text"
                 value={importName}
                 onChange={(e) => setImportName(e.target.value)}
                 className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                placeholder="Leave empty for auto-generated name"
+                placeholder="비워두면 자동 생성"
               />
             </div>
-            
+
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Inventory Content (INI Format)</label>
+              <label className="block text-sm font-medium mb-2">인벤토리 내용 (INI 형식)</label>
               <textarea
                 value={importText}
                 onChange={(e) => setImportText(e.target.value)}
@@ -423,13 +424,13 @@ export default function InventoryManager({ inventories, onRefresh }) {
                 placeholder="[webservers]&#10;web1.example.com ansible_user=ubuntu&#10;192.168.1.10 ansible_user=admin"
               />
             </div>
-            
+
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowImportModal(false)} className="px-6 py-2 border rounded hover:bg-gray-100">
-                Cancel
+                취소
               </button>
-              <button onClick={importInventoryText} className="px-6 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
-                Import
+              <button onClick={importInventoryText} className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                가져오기
               </button>
             </div>
           </div>

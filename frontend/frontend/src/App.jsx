@@ -8,7 +8,8 @@ import ExecutionPanel from './components/ExecutionPanel';
 import ExecutionHistory from './components/ExecutionHistory';
 import { LogOut, User } from 'lucide-react';
 
-const API_URL = '/api';
+// 환경 변수에서 API URL 읽기 (Vite: import.meta.env)
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 function AppContent() {
   const { user, logout, isAuthenticated, loading, getAuthHeader } = useAuth();
@@ -30,7 +31,7 @@ function AppContent() {
     if (view === 'playbooks') loadPlaybooks();
     if (view === 'inventories') loadInventories();
     if (view === 'executions') loadExecutions();
-    if (view === 'execute') {
+    if (view === 'execute' || view === 'execute-local' || view === 'execute-remote') {
       loadPlaybooks();
       loadInventories();
     }
@@ -44,12 +45,12 @@ function AppContent() {
         try {
           const res = await fetch(`${API_URL}/executions/${currentExecution}`);
           const data = await res.json();
-          
+
           if (data.status === 'completed' || data.status === 'failed' || data.status === 'error') {
             setIsExecuting(false);
             clearInterval(interval);
           }
-          
+
           setExecutions(prev => {
             const idx = prev.findIndex(e => e.id === currentExecution);
             if (idx >= 0) {
@@ -102,14 +103,14 @@ function AppContent() {
   };
 
   const deletePlaybook = async (id) => {
-    if (!confirm('Delete this playbook?')) return;
+    if (!confirm('이 작업목록을 삭제하시겠습니까?')) return;
 
     try {
       await fetch(`${API_URL}/playbooks/${id}`, { method: 'DELETE' });
-      alert('✅ Playbook deleted');
+      alert('✅ 작업목록이 삭제되었습니다');
       loadPlaybooks();
     } catch (err) {
-      alert('❌ Failed to delete');
+      alert('❌ 삭제에 실패했습니다');
     }
   };
 
@@ -119,7 +120,7 @@ function AppContent() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <p className="mt-4 text-gray-600">로딩 중...</p>
         </div>
       </div>
     );
@@ -131,115 +132,186 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-blue-600 text-white p-4 shadow-lg">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold">🚀 Ansible Playbook Builder</h1>
-          <div className="flex items-center gap-4">
-            <div className="flex gap-2">
-            <button 
-              onClick={() => navigate('builder')} 
-              className={`px-4 py-2 rounded transition ${view === 'builder' ? 'bg-blue-800' : 'bg-blue-500 hover:bg-blue-700'}`}
-            >
-              Builder
-            </button>
-            <button 
-              onClick={() => navigate('playbooks')} 
-              className={`px-4 py-2 rounded transition ${view === 'playbooks' ? 'bg-blue-800' : 'bg-blue-500 hover:bg-blue-700'}`}
-            >
-              Playbooks
-            </button>
-            <button 
-              onClick={() => navigate('inventories')} 
-              className={`px-4 py-2 rounded transition ${view === 'inventories' ? 'bg-blue-800' : 'bg-blue-500 hover:bg-blue-700'}`}
-            >
-              Inventories
-            </button>
-            <button 
-              onClick={() => navigate('execute')} 
-              className={`px-4 py-2 rounded transition ${view === 'execute' ? 'bg-blue-800' : 'bg-blue-500 hover:bg-blue-700'}`}
-            >
-              Execute
-            </button>
-            <button
-              onClick={() => navigate('executions')}
-              className={`px-4 py-2 rounded transition ${view === 'executions' ? 'bg-blue-800' : 'bg-blue-500 hover:bg-blue-700'}`}
-            >
-              History
-            </button>
-            </div>
-            <div className="flex items-center gap-3 border-l border-blue-500 pl-4">
-              <div className="flex items-center gap-2">
-                <User size={20} />
-                <div className="text-sm">
-                  <div className="font-medium">{user?.username}</div>
-                  <div className="text-xs text-blue-200">{user?.role}</div>
-                </div>
-              </div>
-              <button
-                onClick={logout}
-                className="flex items-center gap-2 px-3 py-2 bg-red-500 hover:bg-red-600 rounded transition"
-                title="Logout"
-              >
-                <LogOut size={18} />
-                Logout
-              </button>
-            </div>
-          </div>
+    <div className="min-h-screen bg-gray-100 flex flex-col">
+      {/* Top Header Bar */}
+      <header className="bg-[#131921] text-white px-4 py-2 flex justify-between items-center flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="text-xl font-semibold">GAIA Builder</span>
+          <span className="text-xs text-gray-400 border-l border-gray-600 pl-3">Console</span>
         </div>
-      </nav>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-sm">
+            <User size={16} className="text-gray-300" />
+            <span className="text-gray-200">{user?.username}</span>
+            <span className="text-xs text-gray-400 bg-[#232f3e] px-2 py-0.5 rounded">{user?.role}</span>
+          </div>
+          <button
+            onClick={logout}
+            className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-300 hover:text-white hover:bg-[#37475a] rounded transition"
+          >
+            <LogOut size={14} />
+            로그아웃
+          </button>
+        </div>
+      </header>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto p-6">
-        {view === 'builder' && (
-          <PlaybookBuilder 
-            onSave={loadPlaybooks}
-            onNavigate={navigate}
-            editingPlaybook={viewData?.editingPlaybook} // ⭐ 전달
-          />
-        )}
+      {/* Main Layout: Sidebar + Content */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Sidebar Navigation */}
+        <aside className="w-56 bg-[#232f3e] text-white flex-shrink-0 overflow-y-auto">
+          {/* 작업 그룹 */}
+          <div className="border-b border-gray-600">
+            <div className="px-4 py-3 text-[#ff9900] text-xs font-bold uppercase tracking-wide">
+              작업
+            </div>
+            <nav className="pb-2">
+              <button
+                onClick={() => navigate('builder')}
+                className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition ${view === 'builder'
+                  ? 'bg-[#37475a] text-white border-l-4 border-[#ff9900]'
+                  : 'text-gray-300 hover:bg-[#37475a] hover:text-white border-l-4 border-transparent'
+                  }`}
+              >
+                📝 생성
+              </button>
+              <button
+                onClick={() => navigate('playbooks')}
+                className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition ${view === 'playbooks'
+                  ? 'bg-[#37475a] text-white border-l-4 border-[#ff9900]'
+                  : 'text-gray-300 hover:bg-[#37475a] hover:text-white border-l-4 border-transparent'
+                  }`}
+              >
+                📚 작업목록
+              </button>
+              <button
+                onClick={() => navigate('inventories')}
+                className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition ${view === 'inventories'
+                  ? 'bg-[#37475a] text-white border-l-4 border-[#ff9900]'
+                  : 'text-gray-300 hover:bg-[#37475a] hover:text-white border-l-4 border-transparent'
+                  }`}
+              >
+                🖥️ 대상
+              </button>
+            </nav>
+          </div>
 
-        {view === 'playbooks' && (
-          <PlaybookList 
-            playbooks={playbooks}
-            onEdit={(pb) => {
-              // ⭐ 수정: navigate 함수 사용
-              navigate('builder', { editingPlaybook: pb });
-            }}
-            onDelete={deletePlaybook}
-            onRefresh={loadPlaybooks}
-            onNavigate={navigate} // ⭐ 추가
-          />
-        )}
+          {/* 실행 그룹 */}
+          <div className="border-b border-gray-600">
+            <div className="px-4 py-3 text-[#ff9900] text-xs font-bold uppercase tracking-wide">
+              실행
+            </div>
+            <nav className="pb-2">
+              <button
+                onClick={() => navigate('execute-local')}
+                className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition ${view === 'execute-local'
+                  ? 'bg-[#37475a] text-white border-l-4 border-[#ff9900]'
+                  : 'text-gray-300 hover:bg-[#37475a] hover:text-white border-l-4 border-transparent'
+                  }`}
+              >
+                💻 로컬 실행
+              </button>
+              <button
+                onClick={() => navigate('execute-remote')}
+                className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition ${view === 'execute-remote'
+                  ? 'bg-[#37475a] text-white border-l-4 border-[#ff9900]'
+                  : 'text-gray-300 hover:bg-[#37475a] hover:text-white border-l-4 border-transparent'
+                  }`}
+              >
+                ☁️ 원격 실행 (GAIA)
+              </button>
+              <button
+                onClick={() => navigate('executions')}
+                className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition ${view === 'executions'
+                  ? 'bg-[#37475a] text-white border-l-4 border-[#ff9900]'
+                  : 'text-gray-300 hover:bg-[#37475a] hover:text-white border-l-4 border-transparent'
+                  }`}
+              >
+                📋 실행 이력
+              </button>
+            </nav>
+          </div>
+        </aside>
 
-        {view === 'inventories' && (
-          <InventoryManager 
-            inventories={inventories}
-            onRefresh={loadInventories}
-          />
-        )}
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-7xl mx-auto">
+            {view === 'builder' && (
+              <PlaybookBuilder
+                onSave={loadPlaybooks}
+                onNavigate={navigate}
+                editingPlaybook={viewData?.editingPlaybook}
+              />
+            )}
 
-        {view === 'execute' && (
-          <ExecutionPanel 
-            playbooks={playbooks}
-            inventories={inventories}
-            onExecute={(execId) => {
-              setCurrentExecution(execId);
-              setIsExecuting(true);
-              navigate('executions');
-            }}
-          />
-        )}
+            {view === 'playbooks' && (
+              <PlaybookList
+                playbooks={playbooks}
+                onEdit={(pb) => navigate('builder', { editingPlaybook: pb })}
+                onDelete={deletePlaybook}
+                onRefresh={loadPlaybooks}
+                onNavigate={navigate}
+              />
+            )}
 
-        {view === 'executions' && (
-          <ExecutionHistory 
-            executions={executions}
-            currentExecution={currentExecution}
-            isExecuting={isExecuting}
-            onRefresh={loadExecutions}
-          />
-        )}
+            {view === 'inventories' && (
+              <InventoryManager
+                inventories={inventories}
+                onRefresh={loadInventories}
+              />
+            )}
+
+            {view === 'execute-local' && (
+              <ExecutionPanel
+                playbooks={playbooks}
+                inventories={inventories}
+                onNavigate={navigate}
+                mode="local"
+                onExecute={(execId) => {
+                  setCurrentExecution(execId);
+                  setIsExecuting(true);
+                  navigate('executions');
+                }}
+              />
+            )}
+
+            {view === 'execute-remote' && (
+              <ExecutionPanel
+                playbooks={playbooks}
+                inventories={inventories}
+                onNavigate={navigate}
+                mode="remote"
+                onExecute={(execId) => {
+                  setCurrentExecution(execId);
+                  setIsExecuting(true);
+                  navigate('executions');
+                }}
+              />
+            )}
+
+            {/* Legacy execute view redirects to local */}
+            {view === 'execute' && (
+              <ExecutionPanel
+                playbooks={playbooks}
+                inventories={inventories}
+                onNavigate={navigate}
+                onExecute={(execId) => {
+                  setCurrentExecution(execId);
+                  setIsExecuting(true);
+                  navigate('executions');
+                }}
+              />
+            )}
+
+            {view === 'executions' && (
+              <ExecutionHistory
+                executions={executions}
+                currentExecution={currentExecution}
+                isExecuting={isExecuting}
+                onRefresh={loadExecutions}
+              />
+            )}
+          </div>
+        </main>
       </div>
     </div>
   );

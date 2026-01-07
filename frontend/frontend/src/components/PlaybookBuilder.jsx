@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Download, Save, Upload, FileText } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Trash2, Download, Save, Upload, FileText, MoreVertical } from 'lucide-react';
 
-const API_URL = '/api';
+// 환경 변수에서 API URL 읽기 (Vite: import.meta.env)
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 const moduleTemplates = {
   'apt': {
@@ -151,7 +152,7 @@ const parameterFieldTypes = {
 
 export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook }) {
   const [playbook, setPlaybook] = useState({
-    name: 'My Playbook',
+    name: '내 플레이북',
     hosts: 'all',
     become: false,
     tasks: []
@@ -169,6 +170,23 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
   const [scriptValidation, setScriptValidation] = useState(null);
   const [isValidatingYaml, setIsValidatingYaml] = useState(false);
   const [isValidatingScript, setIsValidatingScript] = useState(false);
+
+  // 햄버거 메뉴 상태
+  const [showHamburgerMenu, setShowHamburgerMenu] = useState(false);
+  const yamlFileRef = useRef(null);
+  const scriptFileRef = useRef(null);
+  const menuRef = useRef(null);
+
+  // 메뉴 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setShowHamburgerMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // ⭐ editingPlaybook prop 감지
   useEffect(() => {
@@ -189,7 +207,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
 
   const resetBuilder = () => {
     setPlaybook({
-      name: 'My Playbook',
+      name: '내 플레이북',
       hosts: 'all',
       become: false,
       tasks: []
@@ -244,7 +262,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
     yaml += `  tasks:\n`;
 
     playbook.tasks.forEach(task => {
-      yaml += `    - name: ${task.name || 'Unnamed task'}\n`;
+      yaml += `    - name: ${task.name || '이름 없는 작업'}\n`;
       yaml += `      ${task.module}:\n`;
 
       Object.entries(task.params).forEach(([key, value]) => {
@@ -288,7 +306,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
       }
 
       const saved = await res.json();
-      alert(`✅ Playbook ${isEditMode ? 'updated' : 'saved'}: ${saved.name} (ID: ${saved.id})`);
+      alert(`✅ 플레이북 ${isEditMode ? '수정됨' : '저장됨'}: ${saved.name} (ID: ${saved.id})`);
 
       if (onSave) onSave();
       if (onNavigate) onNavigate('playbooks');
@@ -296,7 +314,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
       resetBuilder();
 
     } catch (err) {
-      alert(`❌ Failed to ${isEditMode ? 'update' : 'save'} playbook`);
+      alert(`❌ 플레이북 ${isEditMode ? '수정' : '저장'} 실패`);
     }
   };
 
@@ -358,10 +376,10 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
         if (onSave) onSave();
         if (onNavigate) onNavigate('playbooks');
       } else {
-        alert('❌ Failed to import: ' + result.detail);
+        alert('❌ 가져오기 실패: ' + result.detail);
       }
     } catch (err) {
-      alert('❌ Import failed: ' + err.message);
+      alert('❌ 가져오기 실패: ' + err.message);
     }
 
     event.target.value = '';
@@ -384,7 +402,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
 
   const importYamlText = async () => {
     if (!importText.trim()) {
-      alert('Please enter YAML content');
+      alert('YAML 내용을 입력해주세요');
       return;
     }
 
@@ -397,16 +415,16 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
       const result = await res.json();
 
       if (result.status === 'success') {
-        alert(`✅ Playbook imported!\n\nName: ${result.playbook_name}\nTasks: ${result.tasks_count}`);
+        alert(`✅ 플레이북 가져오기 완료!\n\n이름: ${result.playbook_name}\n작업: ${result.tasks_count}개`);
         setShowImportModal(false);
         setImportText('');
         if (onSave) onSave();
         if (onNavigate) onNavigate('playbooks');
       } else {
-        alert('❌ Failed to import: ' + result.detail);
+        alert('❌ 가져오기 실패: ' + result.detail);
       }
     } catch (err) {
-      alert('❌ Import failed: ' + err.message);
+      alert('❌ 가져오기 실패: ' + err.message);
     }
   };
 
@@ -467,7 +485,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
 
   const importScriptText = async () => {
     if (!scriptText.trim()) {
-      alert('Please enter script content');
+      alert('스크립트 내용을 입력해주세요');
       return;
     }
 
@@ -483,24 +501,24 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
       const result = await res.json();
 
       if (result.status === 'success') {
-        alert(`✅ Script converted!\n\nName: ${result.playbook_name}\nTasks: ${result.tasks_count}`);
+        alert(`✅ 스크립트 변환 완료!\n\n이름: ${result.playbook_name}\n작업: ${result.tasks_count}개`);
         setShowScriptModal(false);
         setScriptText('');
         setScriptName('');
         if (onSave) onSave();
         if (onNavigate) onNavigate('playbooks');
       } else {
-        alert('❌ Failed to import: ' + result.detail);
+        alert('❌ 가져오기 실패: ' + result.detail);
       }
     } catch (err) {
-      alert('❌ Import failed: ' + err.message);
+      alert('❌ 가져오기 실패: ' + err.message);
     }
   };
 
   // Syntax validation functions
   const validateYaml = async () => {
     if (!importText.trim()) {
-      setYamlValidation({ valid: false, error: 'Please enter YAML content' });
+      setYamlValidation({ valid: false, error: 'YAML 내용을 입력해주세요' });
       return;
     }
 
@@ -516,7 +534,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
       const result = await res.json();
       setYamlValidation(result);
     } catch (err) {
-      setYamlValidation({ valid: false, error: 'Validation request failed: ' + err.message });
+      setYamlValidation({ valid: false, error: '검증 요청 실패: ' + err.message });
     } finally {
       setIsValidatingYaml(false);
     }
@@ -524,7 +542,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
 
   const validateScript = async () => {
     if (!scriptText.trim()) {
-      setScriptValidation({ valid: false, error: 'Please enter script content' });
+      setScriptValidation({ valid: false, error: '스크립트 내용을 입력해주세요' });
       return;
     }
 
@@ -540,7 +558,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
       const result = await res.json();
       setScriptValidation(result);
     } catch (err) {
-      setScriptValidation({ valid: false, error: 'Validation request failed: ' + err.message });
+      setScriptValidation({ valid: false, error: '검증 요청 실패: ' + err.message });
     } finally {
       setIsValidatingScript(false);
     }
@@ -573,50 +591,83 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-2xl font-bold">
-              {isEditMode ? `✏️ Edit: ${playbook.name}` : 'Playbook Builder'}
+              {isEditMode ? `✏️ 수정: ${playbook.name}` : '플레이북 생성기'}
             </h2>
             {isEditMode && (
               <p className="text-sm text-gray-600 mt-1">
-                Editing playbook ID: {playbook.id}
+                플레이북 ID: {playbook.id} 수정 중
               </p>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             {isEditMode && (
               <button
                 onClick={resetBuilder}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
               >
                 <Plus size={20} />
-                New Playbook
+                새 작업
               </button>
             )}
-            <label className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 cursor-pointer">
-              <Upload size={20} />
-              Import YAML
-              <input type="file" accept=".yml,.yaml" onChange={importYamlFile} className="hidden" />
-            </label>
-            <label className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 cursor-pointer">
-              <Upload size={20} />
-              Import Script
-              <input type="file" accept=".sh,.bash,.zsh" onChange={importScriptFile} className="hidden" />
-            </label>
-            <button onClick={() => setShowImportModal(true)} className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">
-              <FileText size={20} />
-              Paste YAML
-            </button>
-            <button onClick={() => setShowScriptModal(true)} className="flex items-center gap-2 px-4 py-2 bg-pink-600 text-white rounded hover:bg-pink-700">
-              <FileText size={20} />
-              Paste Script
-            </button>
-            <button onClick={savePlaybook} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
-              <Save size={20} />
-              {isEditMode ? 'Update' : 'Save'}
-            </button>
-            <button onClick={downloadPlaybook} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+            <button onClick={downloadPlaybook} className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
               <Download size={20} />
-              Download
+              다운로드
             </button>
+
+            {/* 햄버거 메뉴 */}
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setShowHamburgerMenu(!showHamburgerMenu)}
+                className="flex items-center justify-center w-10 h-10 bg-gray-500 text-white rounded hover:bg-gray-600"
+              >
+                <MoreVertical size={20} />
+              </button>
+
+              {showHamburgerMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50">
+                  <div className="py-1">
+                    <button
+                      onClick={() => {
+                        yamlFileRef.current?.click();
+                        setShowHamburgerMenu(false);
+                      }}
+                      className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    >
+                      <Upload size={16} />
+                      YAML/Script 가져오기
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowImportModal(true);
+                        setShowHamburgerMenu(false);
+                      }}
+                      className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    >
+                      <FileText size={16} />
+                      YAML/Script 붙여넣기
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Hidden file inputs */}
+            <input
+              ref={yamlFileRef}
+              type="file"
+              accept=".yml,.yaml,.sh,.bash,.zsh"
+              onChange={(e) => {
+                const file = e.target.files[0];
+                if (file) {
+                  if (file.name.endsWith('.yml') || file.name.endsWith('.yaml')) {
+                    importYamlFile(e);
+                  } else {
+                    importScriptFile(e);
+                  }
+                }
+              }}
+              className="hidden"
+            />
           </div>
         </div>
 
@@ -624,7 +675,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div>
-            <label className="block text-sm font-medium mb-2">Playbook Name</label>
+            <label className="block text-sm font-medium mb-2">플레이북 이름</label>
             <input
               type="text"
               value={playbook.name}
@@ -633,7 +684,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">Hosts</label>
+            <label className="block text-sm font-medium mb-2">대상 호스트</label>
             <input
               type="text"
               value={playbook.hosts}
@@ -649,16 +700,16 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
                 onChange={(e) => setPlaybook({ ...playbook, become: e.target.checked })}
                 className="w-4 h-4"
               />
-              <span>Become (sudo)</span>
+              <span>권한 상승 (sudo)</span>
             </label>
           </div>
         </div>
 
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-semibold">Tasks</h3>
+          <h3 className="text-xl font-semibold">작업 목록</h3>
           <button onClick={addTask} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
             <Plus size={20} />
-            Add Task
+            작업 추가
           </button>
         </div>
 
@@ -666,14 +717,14 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
           {playbook.tasks.map((task, index) => (
             <div key={index} className="border rounded-lg p-4 bg-gray-50">
               <div className="flex justify-between mb-4">
-                <h4 className="font-medium">Task {index + 1}</h4>
+                <h4 className="font-medium">작업 {index + 1}</h4>
                 <button onClick={() => removeTask(index)} className="text-red-600 hover:text-red-800">
                   <Trash2 size={20} />
                 </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Task Name</label>
+                  <label className="block text-sm font-medium mb-2">작업 이름</label>
                   <input
                     type="text"
                     value={task.name}
@@ -682,7 +733,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Module</label>
+                  <label className="block text-sm font-medium mb-2">모듈</label>
                   <select
                     value={task.module}
                     onChange={(e) => updateTask(index, 'module', e.target.value)}
@@ -720,7 +771,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
                           value={task.params[param] || ''}
                           onChange={(e) => updateTask(index, param, e.target.value)}
                           className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          placeholder={param === 'cmd' ? 'Enter command...' : ''}
+                          placeholder={param === 'cmd' ? '명령어를 입력하세요...' : ''}
                         />
                       )}
                     </div>
@@ -730,10 +781,18 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
             </div>
           ))}
         </div>
+
+        {/* 저장 버튼 - 작업 영역 하단 오른쪽 */}
+        <div className="flex justify-end mt-6">
+          <button onClick={savePlaybook} className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium shadow-lg">
+            <Save size={20} />
+            {isEditMode ? '작업 수정' : '작업 저장'}
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow-lg p-6">
-        <h3 className="text-xl font-semibold mb-4">Preview YAML</h3>
+        <h3 className="text-xl font-semibold mb-4">YAML 미리보기</h3>
         <pre className="bg-gray-900 text-green-400 p-4 rounded overflow-x-auto text-sm font-mono">
           {generateYAML()}
         </pre>
@@ -744,12 +803,12 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[85vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-2xl font-bold">Import YAML</h3>
+              <h3 className="text-2xl font-bold">YAML 가져오기</h3>
               <button onClick={handleCloseImportModal} className="text-gray-500 hover:text-gray-700 text-3xl">×</button>
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Paste YAML Content</label>
+              <label className="block text-sm font-medium mb-2">YAML 내용 붙여넣기</label>
               <textarea
                 value={importText}
                 onChange={handleYamlTextChange}
@@ -769,7 +828,7 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
                   <span className="text-xl">{yamlValidation.valid ? '✅' : '❌'}</span>
                   <div>
                     <p className="font-semibold">
-                      {yamlValidation.valid ? 'Syntax Valid' : 'Syntax Error'}
+                      {yamlValidation.valid ? '문법 정상' : '문법 오류'}
                     </p>
                     <p className="text-sm mt-1">
                       {yamlValidation.valid ? yamlValidation.message : yamlValidation.error}
@@ -786,17 +845,17 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
 
             <div className="flex gap-2 justify-end">
               <button onClick={handleCloseImportModal} className="px-6 py-2 border rounded hover:bg-gray-100">
-                Cancel
+                취소
               </button>
               <button
                 onClick={validateYaml}
                 disabled={isValidatingYaml}
                 className="px-6 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50"
               >
-                {isValidatingYaml ? '⏳ Checking...' : '🔍 Check Syntax'}
+                {isValidatingYaml ? '⏳ 검사 중...' : '🔍 문법 검사'}
               </button>
               <button onClick={importYamlText} className="px-6 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
-                Import
+                가져오기
               </button>
             </div>
           </div>
@@ -808,23 +867,23 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[85vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-2xl font-bold">Import Shell Script</h3>
+              <h3 className="text-2xl font-bold">쉘 스크립트 가져오기</h3>
               <button onClick={handleCloseScriptModal} className="text-gray-500 hover:text-gray-700 text-3xl">×</button>
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Playbook Name (Optional)</label>
+              <label className="block text-sm font-medium mb-2">플레이북 이름 (선택사항)</label>
               <input
                 type="text"
                 value={scriptName}
                 onChange={(e) => setScriptName(e.target.value)}
                 className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                placeholder="Leave empty for auto-generated name"
+                placeholder="비워두면 자동 생성"
               />
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Shell Script Content</label>
+              <label className="block text-sm font-medium mb-2">쉘 스크립트 내용</label>
               <textarea
                 value={scriptText}
                 onChange={handleScriptTextChange}
@@ -844,14 +903,14 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
                   <span className="text-xl">{scriptValidation.valid ? '✅' : '❌'}</span>
                   <div>
                     <p className="font-semibold">
-                      {scriptValidation.valid ? 'Syntax Valid' : 'Syntax Error'}
+                      {scriptValidation.valid ? '문법 정상' : '문법 오류'}
                     </p>
                     <p className="text-sm mt-1">
                       {scriptValidation.valid ? scriptValidation.message : scriptValidation.error}
                     </p>
                     {!scriptValidation.valid && scriptValidation.line && (
                       <p className="text-sm mt-1 font-mono">
-                        Line: {scriptValidation.line}
+                        줄: {scriptValidation.line}
                       </p>
                     )}
                   </div>
@@ -860,27 +919,27 @@ export default function PlaybookBuilder({ onSave, onNavigate, editingPlaybook })
             )}
 
             <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4 rounded">
-              <h4 className="font-bold text-blue-800 mb-2">🔄 Auto-conversion Features:</h4>
+              <h4 className="font-bold text-blue-800 mb-2">🔄 자동 변환 기능:</h4>
               <ul className="text-sm text-blue-700 space-y-1 ml-4">
-                <li><strong>• Package Install:</strong> apt/yum → apt/yum module</li>
-                <li><strong>• Service Control:</strong> systemctl → service module</li>
-                <li><strong>• Directory Creation:</strong> mkdir → file module</li>
+                <li><strong>• 패키지 설치:</strong> apt/yum → apt/yum 모듈</li>
+                <li><strong>• 서비스 제어:</strong> systemctl → service 모듈</li>
+                <li><strong>• 디렉토리 생성:</strong> mkdir → file 모듈</li>
               </ul>
             </div>
 
             <div className="flex gap-2 justify-end">
               <button onClick={handleCloseScriptModal} className="px-6 py-2 border rounded hover:bg-gray-100">
-                Cancel
+                취소
               </button>
               <button
                 onClick={validateScript}
                 disabled={isValidatingScript}
                 className="px-6 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50"
               >
-                {isValidatingScript ? '⏳ Checking...' : '🔍 Check Syntax'}
+                {isValidatingScript ? '⏳ 검사 중...' : '🔍 문법 검사'}
               </button>
               <button onClick={importScriptText} className="px-6 py-2 bg-orange-600 text-white rounded hover:bg-orange-700">
-                Convert to Playbook
+                플레이북으로 변환
               </button>
             </div>
           </div>

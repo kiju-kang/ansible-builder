@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Silent SSO Check</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <script>
+        // Keycloak Silent SSO Check
+        // 부모 창에 현재 URL 전달하여 SSO 체크 완료 알림
+        parent.postMessage(location.href, location.origin);
+    </script>
+</body>
+</html>

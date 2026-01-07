@@ -1,22 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Plus, Loader, RefreshCw } from 'lucide-react';
+import { Play, Plus, Loader, RefreshCw, Database, ExternalLink } from 'lucide-react';
 
-const API_URL = '/api';
+// 환경 변수에서 API URL 읽기 (Vite: import.meta.env)
+const API_URL = import.meta.env.VITE_API_URL || '/api';
+const AWX_DEV_URL = import.meta.env.VITE_AWX_DEV_URL || '';
+const AWX_PROD_URL = import.meta.env.VITE_AWX_PROD_URL || '';
 
-export default function ExecutionPanel({ playbooks, inventories, onExecute }) {
+export default function ExecutionPanel({ playbooks, inventories, onExecute, onNavigate, mode = 'both' }) {
   const [selectedPlaybook, setSelectedPlaybook] = useState(null);
   const [selectedInventory, setSelectedInventory] = useState(null);
 
-  // AWX Configuration
-  // AWX 인증은 Backend에서 자동으로 처리됩니다 (Keycloak SSO 통합)
+  // Inventory source: 'local' or 'external'
+  const [inventorySource, setInventorySource] = useState('local');
+  const [externalInventories, setExternalInventories] = useState([]);
+  const [loadingExternal, setLoadingExternal] = useState(false);
+
+  // 환경 선택: 'dev' or 'prod'
+  const [selectedEnv, setSelectedEnv] = useState('dev');
+
+  // AWX Configuration - URL은 선택된 환경에 따라 자동 설정
   const [awxConfig, setAwxConfig] = useState({
-    url: '', // Will be loaded from backend
+    url: AWX_DEV_URL,
     template_id: null
   });
 
   const [awxTemplates, setAwxTemplates] = useState([]);
   const [creatingTemplate, setCreatingTemplate] = useState(false);
   const [executorStatus, setExecutorStatus] = useState(null);
+
+  // 환경 변경 시 AWX URL 업데이트
+  useEffect(() => {
+    const newUrl = selectedEnv === 'dev' ? AWX_DEV_URL : AWX_PROD_URL;
+    setAwxConfig(prev => ({ ...prev, url: newUrl }));
+  }, [selectedEnv]);
 
   // Load default AWX config on mount
   useEffect(() => {
@@ -58,7 +74,7 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute }) {
 
   const executePlaybook = async () => {
     if (!selectedPlaybook || !selectedInventory) {
-      alert('Select both playbook and inventory');
+      alert('플레이북과 인벤토리를 모두 선택하세요');
       return;
     }
 
@@ -78,7 +94,7 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute }) {
         onExecute(result.execution_id);
       }
     } catch (err) {
-      alert('❌ Execution failed');
+      alert('❌ 실행 실패');
     }
   };
 
@@ -95,15 +111,42 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute }) {
         setAwxConfig({ ...awxConfig, template_id: data.templates[0].id });
       }
 
-      alert(`✅ Loaded ${data.templates.length} templates`);
+      alert(`✅ ${data.templates.length}개 템플릿 로드됨`);
     } catch (err) {
-      alert('❌ Failed to load AWX templates: ' + err.message);
+      alert('❌ AWX 템플릿 로드 실패: ' + err.message);
+    }
+  };
+
+  // Load inventories from external API (AWX)
+  const loadExternalInventories = async () => {
+    if (!awxConfig.url) {
+      alert('AWX URL을 먼저 입력하세요');
+      return;
+    }
+
+    setLoadingExternal(true);
+    try {
+      const params = new URLSearchParams({ awx_url: awxConfig.url });
+      const res = await fetch(`${API_URL}/awx/inventories?${params}`);
+      const data = await res.json();
+
+      if (data.inventories) {
+        setExternalInventories(data.inventories);
+        alert(`✅ ${data.inventories.length}개의 외부 Inventory를 불러왔습니다`);
+      } else {
+        setExternalInventories([]);
+        alert('외부 Inventory를 찾을 수 없습니다');
+      }
+    } catch (err) {
+      alert('❌ 외부 Inventory 불러오기 실패: ' + err.message);
+    } finally {
+      setLoadingExternal(false);
     }
   };
 
   const createAwxTemplate = async () => {
     if (!selectedPlaybook || !selectedInventory) {
-      alert('Select both playbook and inventory');
+      alert('플레이북과 인벤토리를 모두 선택하세요');
       return;
     }
 
@@ -122,12 +165,12 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute }) {
       const result = await res.json();
 
       if (!res.ok) {
-        alert(`❌ Error: ${result.detail || 'Failed to create template'}`);
+        alert(`❌ 오류: ${result.detail || '템플릿 생성 실패'}`);
         return;
       }
 
       if (result.status === 'success') {
-        alert(`✅ Job Template Created!\n\nName: ${result.template_name}\nTemplate ID: ${result.template_id}\n\nInventory created with groups!`);
+        alert(`✅ Job 템플릿 생성 완료!\n\n이름: ${result.template_name}\n템플릿 ID: ${result.template_id}\n\n인벤토리가 그룹과 함께 생성되었습니다!`);
         setAwxConfig({ ...awxConfig, template_id: result.template_id });
         loadAwxTemplates();
 
@@ -135,10 +178,10 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute }) {
           window.open(result.template_url, '_blank');
         }
       } else if (result.status === 'setup_required') {
-        alert(`⚠️ Setup Required\n\n${result.instructions}`);
+        alert(`⚠️ 설정 필요\n\n${result.instructions}`);
       }
     } catch (err) {
-      alert('❌ Failed to create AWX template: ' + err.message);
+      alert('❌ AWX 템플릿 생성 실패: ' + err.message);
     } finally {
       setCreatingTemplate(false);
     }
@@ -146,11 +189,11 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute }) {
 
   const launchAwxJob = async () => {
     if (!selectedPlaybook || !selectedInventory) {
-      alert('Select both playbook and inventory');
+      alert('플레이북과 인벤토리를 모두 선택하세요');
       return;
     }
     if (!awxConfig.template_id) {
-      alert('Select or create a Job Template first');
+      alert('Job 템플릿을 먼저 선택하거나 생성하세요');
       return;
     }
 
@@ -168,7 +211,7 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute }) {
       const result = await res.json();
 
       if (result.status === 'success') {
-        alert(`✅ AWX Job launched!\n\nJob ID: ${result.awx_job_id}`);
+        alert(`✅ AWX Job 실행됨!\n\nJob ID: ${result.awx_job_id}`);
         if (result.awx_job_url) {
           // OIDC 리디렉션 엔드포인트를 통해 AWX Job 페이지 열기
           const redirectUrl = `${API_URL}/awx/oidc-redirect?job_url=${encodeURIComponent(result.awx_job_url)}`;
@@ -176,7 +219,7 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute }) {
         }
       }
     } catch (err) {
-      alert('❌ Failed to launch AWX job: ' + err.message);
+      alert('❌ AWX Job 실행 실패: ' + err.message);
     }
   };
 
@@ -191,229 +234,369 @@ export default function ExecutionPanel({ playbooks, inventories, onExecute }) {
       setExecutorStatus(data);
 
       if (data.status === 'ready') {
-        alert('✅ Executor playbook is ready!');
+        alert('✅ Executor 플레이북이 준비되었습니다!');
       } else {
-        alert('⚠️ Executor setup required. See instructions above.');
+        alert('⚠️ Executor 설정이 필요합니다. 위의 안내를 참조하세요.');
       }
     } catch (err) {
-      alert('❌ Failed to check executor status');
+      alert('❌ Executor 상태 확인 실패');
     }
   };
 
   return (
     <div className="space-y-6">
       {/* Local Execution */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold mb-6">Execute Playbook (Local)</h2>
+      {(mode === 'local' || mode === 'both') && (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h2 className="text-2xl font-bold mb-6">플레이북 실행 (로컬)</h2>
 
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">Select Playbook</label>
-          <select
-            value={selectedPlaybook || ''}
-            onChange={(e) => setSelectedPlaybook(e.target.value)}
-            className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          >
-            <option value="">-- Select Playbook --</option>
-            {playbooks.map(pb => (
-              <option key={pb.id} value={pb.id}>{pb.name} (ID: {pb.id})</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">Select Inventory</label>
-          <select
-            value={selectedInventory || ''}
-            onChange={(e) => setSelectedInventory(e.target.value)}
-            className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          >
-            <option value="">-- Select Inventory --</option>
-            {inventories.map(inv => (
-              <option key={inv.id} value={inv.id}>{inv.name} (ID: {inv.id})</option>
-            ))}
-          </select>
-        </div>
-
-        <button
-          onClick={executePlaybook}
-          className="w-full px-6 py-3 bg-green-600 text-white rounded hover:bg-green-700 flex items-center justify-center gap-2 font-medium"
-        >
-          <Play size={20} />
-          Execute Locally
-        </button>
-      </div>
-
-      {/* AWX Execution */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold mb-6">Execute via AWX</h2>
-
-        {/* Executor Status Warning */}
-        {executorStatus?.status === 'setup_required' && (
-          <div className="bg-yellow-50 border-l-4 border-yellow-500 p-6 mb-6 rounded-lg">
-            <div className="flex items-start">
-              <div className="flex-shrink-0">
-                <svg className="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-              <div className="ml-3 flex-1">
-                <h3 className="text-lg font-bold text-yellow-800 mb-2">⚙️ One-Time Setup Required</h3>
-                <p className="text-sm text-yellow-700 mb-3">
-                  To enable dynamic playbook execution, add the executor playbook to your AWX project.
-                </p>
-
-                <div className="bg-white border border-yellow-200 rounded p-4 mb-3">
-                  <h4 className="font-semibold text-yellow-800 mb-2">Setup Instructions:</h4>
-                  <pre className="text-xs bg-gray-50 p-3 rounded overflow-x-auto whitespace-pre-wrap text-gray-800">
-                    {executorStatus.instructions}
-                  </pre>
-                </div>
-
-                <details className="bg-white border border-yellow-200 rounded p-4 mb-3">
-                  <summary className="font-semibold text-yellow-800 cursor-pointer">
-                    📄 View Playbook Content
-                  </summary>
-                  <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded overflow-x-auto mt-2 max-h-96 overflow-y-auto font-mono">
-                    {executorStatus.playbook_content}
-                  </pre>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(executorStatus.playbook_content);
-                      alert('✅ Playbook content copied to clipboard!');
-                    }}
-                    className="mt-2 px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm"
-                  >
-                    📋 Copy to Clipboard
-                  </button>
-                </details>
-
+          <div className="mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <label className="block text-sm font-medium">작업 선택</label>
+              {onNavigate && (
                 <button
-                  onClick={checkExecutorStatus}
-                  className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 flex items-center gap-2"
+                  onClick={() => onNavigate('builder')}
+                  className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
                 >
-                  <RefreshCw size={18} />
-                  Recheck Status
+                  <Plus size={14} />
+                  Playbook 생성
                 </button>
-              </div>
+              )}
             </div>
-          </div>
-        )}
-
-        <div className="mb-6">
-          <label className="block text-sm font-medium mb-2">AWX URL</label>
-          <input
-            type="text"
-            value={awxConfig.url}
-            onChange={(e) => setAwxConfig({ ...awxConfig, url: e.target.value })}
-            className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            placeholder="http://192.168.64.26:30000"
-          />
-          <p className="mt-2 text-sm text-gray-600">
-            ✓ AWX 인증은 Keycloak SSO를 통해 자동으로 처리됩니다
-          </p>
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">Select Playbook</label>
-          <select
-            value={selectedPlaybook || ''}
-            onChange={(e) => setSelectedPlaybook(e.target.value)}
-            className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          >
-            <option value="">-- Select Playbook --</option>
-            {playbooks.map(pb => (
-              <option key={pb.id} value={pb.id}>{pb.name} (ID: {pb.id})</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="mb-6">
-          <label className="block text-sm font-medium mb-2">Select Inventory</label>
-          <select
-            value={selectedInventory || ''}
-            onChange={(e) => setSelectedInventory(e.target.value)}
-            className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          >
-            <option value="">-- Select Inventory --</option>
-            {inventories.map(inv => (
-              <option key={inv.id} value={inv.id}>{inv.name} (ID: {inv.id})</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="mb-6 pb-6 border-b">
-          <button
-            onClick={createAwxTemplate}
-            disabled={creatingTemplate || executorStatus?.status === 'setup_required'}
-            className={`w-full px-6 py-3 text-white rounded flex items-center justify-center gap-2 font-medium ${executorStatus?.status === 'setup_required' || creatingTemplate
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-indigo-600 hover:bg-indigo-700'
-              }`}
-          >
-            {creatingTemplate ? (
-              <>
-                <Loader className="animate-spin" size={20} />
-                Creating Template...
-              </>
-            ) : executorStatus?.status === 'setup_required' ? (
-              <>
-                <span>⚠️</span>
-                Setup Required (See Above)
-              </>
-            ) : (
-              <>
-                <Plus size={20} />
-                Create Job Template in AWX
-              </>
-            )}
-          </button>
-          <p className="text-xs text-gray-600 mt-2 text-center">
-            This will automatically create a new Job Template, Project, and Inventory in AWX
-          </p>
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">Existing Job Templates</label>
-          <div className="flex gap-2">
             <select
-              value={awxConfig.template_id || ''}
-              onChange={(e) => setAwxConfig({ ...awxConfig, template_id: parseInt(e.target.value) })}
-              className="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              value={selectedPlaybook || ''}
+              onChange={(e) => setSelectedPlaybook(e.target.value)}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
-              <option value="">-- Select Template --</option>
-              {awxTemplates.map(tpl => (
-                <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
+              <option value="">-- 작업 선택 --</option>
+              {playbooks.map(pb => (
+                <option key={pb.id} value={pb.id}>{pb.name} (ID: {pb.id})</option>
               ))}
             </select>
-            <button
-              onClick={loadAwxTemplates}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">작업 대상 선택</label>
+
+            {/* Inventory Source Toggle */}
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={() => setInventorySource('local')}
+                className={`flex-1 px-3 py-2 rounded flex items-center justify-center gap-2 text-sm ${inventorySource === 'local'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+              >
+                <Database size={16} />
+                생성한 Inventory
+              </button>
+              <button
+                onClick={() => setInventorySource('external')}
+                className={`flex-1 px-3 py-2 rounded flex items-center justify-center gap-2 text-sm ${inventorySource === 'external'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+              >
+                <ExternalLink size={16} />
+                외부 API에서 불러오기
+              </button>
+            </div>
+
+            {inventorySource === 'local' ? (
+              <select
+                value={selectedInventory || ''}
+                onChange={(e) => setSelectedInventory(e.target.value)}
+                className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="">-- 작업대상 선택 --</option>
+                {inventories.map(inv => (
+                  <option key={inv.id} value={inv.id}>{inv.name} (ID: {inv.id})</option>
+                ))}
+              </select>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <select
+                    value={selectedInventory || ''}
+                    onChange={(e) => setSelectedInventory(e.target.value)}
+                    className="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    <option value="">-- 외부 작업대상 선택 --</option>
+                    {externalInventories.map(inv => (
+                      <option key={inv.id} value={inv.id}>{inv.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={loadExternalInventories}
+                    disabled={loadingExternal}
+                    className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 flex items-center gap-2"
+                  >
+                    {loadingExternal ? <Loader className="animate-spin" size={16} /> : <RefreshCw size={16} />}
+                    불러오기
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500">AWX URL 입력 후 외부 Inventory를 불러올 수 있습니다</p>
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={executePlaybook}
+            className="w-full px-6 py-3 bg-green-600 text-white rounded hover:bg-green-700 flex items-center justify-center gap-2 font-medium"
+          >
+            <Play size={20} />
+            로컬 실행
+          </button>
+        </div>
+      )}
+
+      {/* AWX Execution */}
+      {(mode === 'remote' || mode === 'both') && (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h2 className="text-2xl font-bold mb-6">GAIA를 통한 실행</h2>
+
+          {/* Executor Status Warning */}
+          {executorStatus?.status === 'setup_required' && (
+            <div className="bg-yellow-50 border-l-4 border-yellow-500 p-6 mb-6 rounded-lg">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg className="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-bold text-yellow-800 mb-2">⚙️ 초기 설정 필요</h3>
+                  <p className="text-sm text-yellow-700 mb-3">
+                    동적 플레이북 실행을 위해 AWX 프로젝트에 executor 플레이북을 추가하세요.
+                  </p>
+
+                  <div className="bg-white border border-yellow-200 rounded p-4 mb-3">
+                    <h4 className="font-semibold text-yellow-800 mb-2">설정 안내:</h4>
+                    <pre className="text-xs bg-gray-50 p-3 rounded overflow-x-auto whitespace-pre-wrap text-gray-800">
+                      {executorStatus.instructions}
+                    </pre>
+                  </div>
+
+                  <details className="bg-white border border-yellow-200 rounded p-4 mb-3">
+                    <summary className="font-semibold text-yellow-800 cursor-pointer">
+                      📄 플레이북 내용 보기
+                    </summary>
+                    <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded overflow-x-auto mt-2 max-h-96 overflow-y-auto font-mono">
+                      {executorStatus.playbook_content}
+                    </pre>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(executorStatus.playbook_content);
+                        alert('✅ 플레이북 내용이 클립보드에 복사되었습니다!');
+                      }}
+                      className="mt-2 px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-sm"
+                    >
+                      📋 클립보드에 복사
+                    </button>
+                  </details>
+
+                  <button
+                    onClick={checkExecutorStatus}
+                    className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 flex items-center gap-2"
+                  >
+                    <RefreshCw size={18} />
+                    상태 다시 확인
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium mb-2">실행 환경</label>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedEnv('dev')}
+                className={`flex-1 px-4 py-3 rounded-lg text-center font-medium transition ${selectedEnv === 'dev'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+              >
+                🔧 개발
+              </button>
+              <button
+                onClick={() => setSelectedEnv('prod')}
+                className={`flex-1 px-4 py-3 rounded-lg text-center font-medium transition ${selectedEnv === 'prod'
+                    ? 'bg-orange-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+              >
+                🚀 운영
+              </button>
+            </div>
+            <p className="mt-2 text-sm text-gray-600">
+              ✓ GAIA 인증은 Keycloak SSO를 통해 자동으로 처리됩니다
+            </p>
+          </div>
+
+          <div className="mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <label className="block text-sm font-medium">작업 선택</label>
+              {onNavigate && (
+                <button
+                  onClick={() => onNavigate('builder')}
+                  className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                >
+                  <Plus size={14} />
+                  Playbook 생성
+                </button>
+              )}
+            </div>
+            <select
+              value={selectedPlaybook || ''}
+              onChange={(e) => setSelectedPlaybook(e.target.value)}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
-              <RefreshCw size={18} />
-              Refresh
+              <option value="">-- 작업 선택 --</option>
+              {playbooks.map(pb => (
+                <option key={pb.id} value={pb.id}>{pb.name} (ID: {pb.id})</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium mb-2">작업 대상 선택</label>
+
+            {/* Inventory Source Toggle */}
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={() => setInventorySource('local')}
+                className={`flex-1 px-3 py-2 rounded flex items-center justify-center gap-2 text-sm ${inventorySource === 'local'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+              >
+                <Database size={16} />
+                생성한 Inventory
+              </button>
+              <button
+                onClick={() => setInventorySource('external')}
+                className={`flex-1 px-3 py-2 rounded flex items-center justify-center gap-2 text-sm ${inventorySource === 'external'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+              >
+                <ExternalLink size={16} />
+                AWX에서 불러오기
+              </button>
+            </div>
+
+            {inventorySource === 'local' ? (
+              <select
+                value={selectedInventory || ''}
+                onChange={(e) => setSelectedInventory(e.target.value)}
+                className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="">-- 작업대상 선택 --</option>
+                {inventories.map(inv => (
+                  <option key={inv.id} value={inv.id}>{inv.name} (ID: {inv.id})</option>
+                ))}
+              </select>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <select
+                    value={selectedInventory || ''}
+                    onChange={(e) => setSelectedInventory(e.target.value)}
+                    className="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    <option value="">-- GAIA 작업대상 선택 --</option>
+                    {externalInventories.map(inv => (
+                      <option key={inv.id} value={inv.id}>{inv.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={loadExternalInventories}
+                    disabled={loadingExternal}
+                    className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 flex items-center gap-2"
+                  >
+                    {loadingExternal ? <Loader className="animate-spin" size={16} /> : <RefreshCw size={16} />}
+                    불러오기
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="mb-6 pb-6 border-b">
+            <button
+              onClick={createAwxTemplate}
+              disabled={creatingTemplate || executorStatus?.status === 'setup_required'}
+              className={`w-full px-6 py-3 text-white rounded flex items-center justify-center gap-2 font-medium ${executorStatus?.status === 'setup_required' || creatingTemplate
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-indigo-600 hover:bg-indigo-700'
+                }`}
+            >
+              {creatingTemplate ? (
+                <>
+                  <Loader className="animate-spin" size={20} />
+                  템플릿 생성 중...
+                </>
+              ) : executorStatus?.status === 'setup_required' ? (
+                <>
+                  <span>⚠️</span>
+                  설정 필요 (위 참조)
+                </>
+              ) : (
+                <>
+                  <Plus size={20} />
+                  AWX에 Job 템플릿 생성
+                </>
+              )}
             </button>
+            <p className="text-xs text-gray-600 mt-2 text-center">
+              이 버튼을 클릭하면 AWX에 새 Job 템플릿, 프로젝트, 인벤토리가 자동으로 생성됩니다
+            </p>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">기존 Job 템플릿</label>
+            <div className="flex gap-2">
+              <select
+                value={awxConfig.template_id || ''}
+                onChange={(e) => setAwxConfig({ ...awxConfig, template_id: parseInt(e.target.value) })}
+                className="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="">-- 템플릿 선택 --</option>
+                {awxTemplates.map(tpl => (
+                  <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={loadAwxTemplates}
+                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 flex items-center gap-2"
+              >
+                <RefreshCw size={18} />
+                새로고침
+              </button>
+            </div>
+          </div>
+
+          <button
+            onClick={launchAwxJob}
+            className="w-full px-6 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center justify-center gap-2 font-medium"
+          >
+            <Play size={20} />
+            AWX에서 Job 실행
+          </button>
+
+          <div className="mt-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
+            <p className="text-sm text-blue-800">
+              <strong>사용 방법:</strong>
+            </p>
+            <ol className="text-sm text-blue-800 mt-2 ml-4 list-decimal space-y-1">
+              <li>플레이북과 인벤토리 선택</li>
+              <li>"AWX에 Job 템플릿 생성" 클릭하여 자동 생성</li>
+              <li>또는 기존 템플릿 선택 후 "AWX에서 Job 실행" 클릭</li>
+            </ol>
           </div>
         </div>
-
-        <button
-          onClick={launchAwxJob}
-          className="w-full px-6 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center justify-center gap-2 font-medium"
-        >
-          <Play size={20} />
-          Execute Job in AWX
-        </button>
-
-        <div className="mt-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
-          <p className="text-sm text-blue-800">
-            <strong>Steps:</strong>
-          </p>
-          <ol className="text-sm text-blue-800 mt-2 ml-4 list-decimal space-y-1">
-            <li>Select Playbook and Inventory</li>
-            <li>Click "Create Job Template" to auto-create in AWX</li>
-            <li>Or select existing template and click "Execute Job"</li>
-          </ol>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -43,7 +43,13 @@ os.environ['ANSIBLE_HOST_KEY_CHECKING'] = 'False'
 # AWX 통합 설정 (환경 변수에서 로드)
 AWX_URL = os.getenv('AWX_URL', 'http://192.168.64.26:30000')
 AWX_TOKEN = os.getenv('AWX_TOKEN', '')
+AWX_DEFAULT_PROJECT_ID = int(os.getenv('AWX_DEFAULT_PROJECT_ID', '0')) or None  # 기본 프로젝트 ID (0이면 자동 검색)
+AWX_DEFAULT_JOB_TEMPLATE_ID = int(os.getenv('AWX_DEFAULT_JOB_TEMPLATE_ID', '0')) or None  # 기본 Job Template ID (0이면 자동 검색)
 print(f"✓ AWX integration configured: {AWX_URL}")
+if AWX_DEFAULT_PROJECT_ID:
+    print(f"  - Default Project ID: {AWX_DEFAULT_PROJECT_ID}")
+if AWX_DEFAULT_JOB_TEMPLATE_ID:
+    print(f"  - Default Job Template ID: {AWX_DEFAULT_JOB_TEMPLATE_ID}")
 
 app = FastAPI(title="Ansible Playbook Builder API")
 
@@ -71,6 +77,42 @@ app.add_middleware(
 # get_current_user_keycloak: 관리자 권한 필수
 # ============================================
 
+
+# ============================================
+# Frontend Configuration API
+# ============================================
+# Kubernetes ConfigMap에서 환경변수를 읽어 Frontend에 동적으로 제공
+# IP 변경 시 ConfigMap만 수정하고 Pod 재시작하면 됨 (빌드 불필요)
+# ============================================
+
+@app.get("/api/config")
+async def get_frontend_config():
+    """
+    Frontend에서 사용할 설정값을 환경변수에서 읽어서 반환
+    Kubernetes ConfigMap/Secret으로 관리되는 값들
+    
+    Note: KEYCLOAK_FRONTEND_URL is the external URL for browser access
+          KEYCLOAK_SERVER_URL is the internal K8s service URL for backend validation
+    """
+    # Use external URL for frontend, fallback to KEYCLOAK_SERVER_URL if not set
+    keycloak_frontend_url = os.getenv("KEYCLOAK_FRONTEND_URL", KEYCLOAK_SERVER_URL)
+    
+    return {
+        # Keycloak SSO 설정 (external URL for browser)
+        "keycloak_url": keycloak_frontend_url,
+        "keycloak_realm": KEYCLOAK_REALM,
+        "keycloak_client_id": KEYCLOAK_CLIENT_ID,
+        
+        # AWX 설정
+        "awx_url": AWX_URL,
+        
+        # 앱 설정
+        "app_title": os.getenv("APP_TITLE", "Ansible 작업 생성기"),
+        "app_env": os.getenv("APP_ENV", "development"),
+        
+        # Feature flags
+        "keycloak_enabled": KEYCLOAK_ENABLED,
+    }
 
 
 # Playbook CRUD (DB 사용)
@@ -559,11 +601,32 @@ async def import_playbook_from_yaml(file: UploadFile = File(...), db: Session = 
                     else:
                         params_dict[k] = str(v) if v is not None else ""
                 
-                converted_tasks.append({
+                converted_task = {
                     'name': task_name,
                     'module': module_name,
                     'params': params_dict
-                })
+                }
+                
+                # loop/with_items 속성 보존
+                if task.get('loop'):
+                    converted_task['loop'] = task.get('loop')
+                elif task.get('with_items'):
+                    converted_task['loop'] = task.get('with_items')
+                
+                # 모든 Ansible Task 속성 보존
+                task_attrs = [
+                    'become', 'when', 'delegate_to', 'register', 
+                    'ignore_errors', 'failed_when', 'changed_when',
+                    'run_once', 'retries', 'until', 'delay',
+                    'notify', 'tags', 'environment', 'vars',
+                    'async', 'poll', 'no_log', 'loop_control'
+                ]
+                
+                for attr in task_attrs:
+                    if task.get(attr) is not None:
+                        converted_task[attr] = task.get(attr)
+                
+                converted_tasks.append(converted_task)
         
         if not converted_tasks:
             raise HTTPException(status_code=400, detail="No valid tasks found in YAML")
@@ -664,11 +727,32 @@ async def import_playbook_from_text(data: YamlTextImport, db: Session = Depends(
                 for k, v in module_params.items():
                     params_dict[k] = str(v) if v is not None else ""
                 
-                converted_tasks.append({
+                converted_task = {
                     'name': task_name,
                     'module': module_name,
                     'params': params_dict
-                })
+                }
+                
+                # loop/with_items 속성 보존
+                if task.get('loop'):
+                    converted_task['loop'] = task.get('loop')
+                elif task.get('with_items'):
+                    converted_task['loop'] = task.get('with_items')
+                
+                # 모든 Ansible Task 속성 보존
+                task_attrs = [
+                    'become', 'when', 'delegate_to', 'register', 
+                    'ignore_errors', 'failed_when', 'changed_when',
+                    'run_once', 'retries', 'until', 'delay',
+                    'notify', 'tags', 'environment', 'vars',
+                    'async', 'poll', 'no_log', 'loop_control'
+                ]
+                
+                for attr in task_attrs:
+                    if task.get(attr) is not None:
+                        converted_task[attr] = task.get(attr)
+                
+                converted_tasks.append(converted_task)
         
         # DB에 저장
         db_playbook = AnsibleBuilderPlaybook(
@@ -1474,8 +1558,15 @@ async def health_check():
 
 
 @app.post("/api/awx/create-template")
-async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(get_db)):
+async def create_awx_job_template(
+    request: AWXJobRequest, 
+    db: Session = Depends(get_db),
+    current_user: Optional[AnsibleBuilderUser] = Depends(get_optional_user_keycloak)
+):
     """AWX에 새로운 Job Template 생성"""
+    
+    # 사용자 이름 추출 (SSO 또는 anonymous)
+    username = current_user.username if current_user else "anonymous"
     
     # 🔴 DB 객체 조회
     playbook = db.query(AnsibleBuilderPlaybook).filter(
@@ -1537,12 +1628,13 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
             if not projects.get('results'):
                 raise HTTPException(status_code=400, detail="No projects found")
             
-            # Demo Project 찾기
-            project_id = None
-            for proj in projects['results']:
-                if 'demo' in proj['name'].lower():
-                    project_id = proj['id']
-                    break
+            # 환경 변수에서 기본 프로젝트 ID 사용, 없으면 Demo Project 찾기
+            project_id = AWX_DEFAULT_PROJECT_ID
+            if not project_id:
+                for proj in projects['results']:
+                    if 'demo' in proj['name'].lower():
+                        project_id = proj['id']
+                        break
             
             if not project_id:
                 project_id = projects['results'][0]['id']
@@ -1618,7 +1710,10 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
             
             # ⭐ 5. Job Template 생성 (templates_url 정의)
             templates_url = f"{awx_url}/api/v2/job_templates/"
-            template_name = f"{playbook_dict['name']}_{inventory_dict['name']}"
+            
+            # 읽기 쉬운 템플릿 이름: [사용자] Playbook이름 @ 날짜시간
+            short_date = datetime.now().strftime("%m%d_%H%M")
+            template_name = f"[{username}] {playbook_dict['name']} @ {short_date}"
             
             # 기존 Template 확인
             template_check = await client.get(f"{templates_url}?name={template_name}", headers=headers)
@@ -1641,7 +1736,7 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                 "project": project_id,
                 "playbook": "ansible_builder_executor.yml",
                 "verbosity": 2,
-                "ask_variables_on_launch": True,  # ⭐ 이것만으로 부족
+                "ask_variables_on_launch": True,
                 "ask_limit_on_launch": False,
                 "ask_tags_on_launch": False,
                 "ask_skip_tags_on_launch": False,
@@ -1649,7 +1744,13 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                 "ask_verbosity_on_launch": False,
                 "ask_inventory_on_launch": False,
                 "ask_credential_on_launch": False,
-                "extra_vars": ""  # ⭐ 빈 문자열 (중요)
+                # ⭐ extra_vars를 YAML 형식으로 전달 (AWX 호환성)
+                "extra_vars": yaml.dump({
+                    "builder_playbook_name": playbook_dict['name'],
+                    "target_hosts": playbook_dict['hosts'],
+                    "become_required": playbook_dict['become'],
+                    "builder_tasks": playbook_dict['tasks']
+                }, default_flow_style=False)
             }
             
             if credential_id:
@@ -1741,19 +1842,30 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
             if not projects.get('results'):
                 raise HTTPException(status_code=400, detail="No projects found in AWX. Please create at least one project with playbooks first.")
             
-            # Demo Project 찾기 또는 첫 번째 Project 사용
-            project_id = None
+            # 환경 변수에서 기본 프로젝트 ID 사용, 없으면 Demo Project 찾기
+            project_id = AWX_DEFAULT_PROJECT_ID
             demo_playbook = None
-            for proj in projects['results']:
-                if 'demo' in proj['name'].lower() or 'example' in proj['name'].lower():
-                    project_id = proj['id']
-                    playbooks_url = f"{awx_url}/api/v2/projects/{project_id}/playbooks/"
-                    pb_res = await client.get(playbooks_url, headers=headers)
-                    if pb_res.status_code == 200:
-                        pbs = pb_res.json()
-                        if pbs:
-                            demo_playbook = pbs[0]
-                    break
+            
+            if project_id:
+                # 환경 변수로 지정된 프로젝트 사용
+                playbooks_url = f"{awx_url}/api/v2/projects/{project_id}/playbooks/"
+                pb_res = await client.get(playbooks_url, headers=headers)
+                if pb_res.status_code == 200:
+                    pbs = pb_res.json()
+                    if pbs:
+                        demo_playbook = pbs[0]
+            else:
+                # Demo Project 찾기 또는 첫 번째 Project 사용
+                for proj in projects['results']:
+                    if 'demo' in proj['name'].lower() or 'example' in proj['name'].lower():
+                        project_id = proj['id']
+                        playbooks_url = f"{awx_url}/api/v2/projects/{project_id}/playbooks/"
+                        pb_res = await client.get(playbooks_url, headers=headers)
+                        if pb_res.status_code == 200:
+                            pbs = pb_res.json()
+                            if pbs:
+                                demo_playbook = pbs[0]
+                        break
             
             if not project_id:
                 project_id = projects['results'][0]['id']
@@ -2039,7 +2151,9 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
 
 
             # 5. Job Template 생성
-            template_name = f"{playbook_dict['name']}_{inventory_dict['name']}"
+            # 읽기 쉬운 템플릿 이름: [사용자] Playbook이름 @ 날짜시간
+            short_date = datetime.now().strftime("%m%d_%H%M")
+            template_name = f"[{username}] {playbook_dict['name']} @ {short_date}"
             templates_url = f"{awx_url}/api/v2/job_templates/"
             
             # 기존 Template 확인
@@ -2068,12 +2182,12 @@ async def create_awx_job_template(request: AWXJobRequest, db: Session = Depends(
                 "playbook": demo_playbook_file,
                 "verbosity": 1,
                 "ask_variables_on_launch": True,
-                "extra_vars": json.dumps({
+                "extra_vars": yaml.dump({
                     "builder_playbook_name": playbook_dict['name'],
                     "target_hosts": playbook_dict['hosts'],
                     "become_required": playbook_dict['become'],
                     "builder_tasks": playbook_dict['tasks']
-                }, indent=2)
+                }, default_flow_style=False)
             }
             
             if credential_id:
@@ -2146,9 +2260,9 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
                 "builder_tasks": playbook_dict['tasks']
             }
             
-            # ⭐ AWX API 형식: extra_vars는 JSON 문자열로 전달
+            # ⭐ AWX API 형식: extra_vars는 YAML 문자열로 전달
             launch_payload = {
-                "extra_vars": json.dumps(extra_vars)
+                "extra_vars": yaml.dump(extra_vars, default_flow_style=False)
             }
             
             print(f"🚀 Launching job with payload:")
@@ -2212,7 +2326,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
             }
             
             update_payload = {
-                "extra_vars": json.dumps(extra_vars_data)
+                "extra_vars": yaml.dump(extra_vars_data, default_flow_style=False)
             }
             
             update_res = await client.patch(template_url, headers=headers, json=update_payload)
@@ -2280,7 +2394,7 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
             }
             
             update_payload = {
-                "extra_vars": json.dumps(extra_vars_data)
+                "extra_vars": yaml.dump(extra_vars_data, default_flow_style=False)
             }
             
             print(f"📝 Updating template with extra_vars:\n{json.dumps(extra_vars_data, indent=2)}")
@@ -2380,9 +2494,9 @@ async def launch_awx_job(request: AWXJobRequest, db: Session = Depends(get_db)):
             
             launch_url = f"{awx_url}/api/v2/job_templates/{request.job_template_id}/launch/"
             
-            # ⭐ AWX API 형식: extra_vars는 JSON 문자열
+            # ⭐ AWX API 형식: extra_vars는 YAML 문자열
             job_data = {
-                "extra_vars": json.dumps(new_extra_vars)
+                "extra_vars": yaml.dump(new_extra_vars, default_flow_style=False)
             }
             
             print(f"🚀 Launching with extra_vars:\n{json.dumps(new_extra_vars, indent=2)}")
@@ -2519,6 +2633,42 @@ async def get_awx_templates(
             ]
             
             return {"templates": templates}
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to connect to AWX: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AWX integration error: {str(e)}")
+
+
+@app.get("/api/awx/inventories")
+async def get_awx_inventories(
+    awx_url: Optional[str] = None,
+    awx_token: Optional[str] = None
+):
+    """AWX Inventories 목록 조회 (외부 API)"""
+    awx_url = awx_url or AWX_URL
+    awx_token = awx_token or AWX_TOKEN
+
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+            headers = {"Authorization": f"Bearer {awx_token}"}
+            url = f"{awx_url}/api/v2/inventories/"
+            response = await client.get(url, headers=headers)
+            
+            if response.status_code != 200:
+                raise HTTPException(status_code=400, detail="Failed to fetch inventories from AWX")
+            
+            data = response.json()
+            inventories = [
+                {
+                    "id": inv["id"], 
+                    "name": inv["name"], 
+                    "description": inv.get("description", ""),
+                    "total_hosts": inv.get("total_hosts", 0)
+                }
+                for inv in data.get("results", [])
+            ]
+            
+            return {"inventories": inventories}
     except httpx.RequestError as e:
         raise HTTPException(status_code=500, detail=f"Failed to connect to AWX: {str(e)}")
     except Exception as e:
@@ -2776,20 +2926,27 @@ async def ensure_executor_playbook_exists(awx_url: str, awx_token: str, project_
                     
                     # 기본 안내
                     return (False, None, "Executor playbook not found. Please add ansible_builder_executor.yml to your AWX project.")
+            else:
+                # API 호출 실패 시 상세 에러 반환
+                error_detail = f"Failed to get playbooks from AWX (status: {pb_res.status_code}, project_id: {project_id})"
+                print(f"⚠️ {error_detail}")
+                return (False, None, f"{error_detail}. Check AWX connection and credentials.")
         
         except Exception as e:
             error_msg = f"Error checking executor playbook: {str(e)}"
             print(error_msg)
             return (False, None, error_msg)
     
-    return (False, None, "Unable to verify executor playbook")
+    return (False, None, f"Unable to verify executor playbook for project_id={project_id}. AWX URL: {awx_url}")
 
 
 @app.get("/api/awx/config")
 async def get_awx_config():
     """기본 AWX 설정 반환"""
     return {
-        "url": AWX_URL
+        "url": AWX_URL,
+        "default_project_id": AWX_DEFAULT_PROJECT_ID,
+        "default_job_template_id": AWX_DEFAULT_JOB_TEMPLATE_ID
     }
 
 @app.get("/api/awx/check-executor")
@@ -2804,24 +2961,30 @@ async def check_awx_executor(
     awx_token = awx_token or AWX_TOKEN
     
     try:
-        # project_id가 없으면 자동으로 찾기 (Demo Project 우선)
+        # project_id가 없으면 환경 변수 또는 자동으로 찾기
         if not project_id:
-            async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
-                headers = {"Authorization": f"Bearer {awx_token}"}
-                projects_res = await client.get(f"{awx_url}/api/v2/projects/", headers=headers)
-                
-                if projects_res.status_code == 200:
-                    projects = projects_res.json().get('results', [])
+            # 1. 환경 변수에서 기본 프로젝트 ID 사용
+            if AWX_DEFAULT_PROJECT_ID:
+                project_id = AWX_DEFAULT_PROJECT_ID
+                print(f"✓ Using default project ID from environment: {project_id}")
+            else:
+                # 2. 자동으로 찾기 (Demo Project 우선)
+                async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
+                    headers = {"Authorization": f"Bearer {awx_token}"}
+                    projects_res = await client.get(f"{awx_url}/api/v2/projects/", headers=headers)
                     
-                    # 1. 'demo'가 포함된 프로젝트 찾기
-                    for proj in projects:
-                        if 'demo' in proj['name'].lower():
-                            project_id = proj['id']
-                            break
-                    
-                    # 2. 없으면 첫 번째 프로젝트 사용
-                    if not project_id and projects:
-                        project_id = projects[0]['id']
+                    if projects_res.status_code == 200:
+                        projects = projects_res.json().get('results', [])
+                        
+                        # 'demo'가 포함된 프로젝트 찾기
+                        for proj in projects:
+                            if 'demo' in proj['name'].lower():
+                                project_id = proj['id']
+                                break
+                        
+                        # 없으면 첫 번째 프로젝트 사용
+                        if not project_id and projects:
+                            project_id = projects[0]['id']
                 
                 if not project_id:
                      return {
@@ -2932,6 +3095,10 @@ async def awx_oidc_redirect(job_url: str):
     사용자를 AWX OIDC 로그인으로 리디렉션한 후 Job 페이지로 이동
     """
     from fastapi.responses import HTMLResponse
+    from urllib.parse import unquote
+
+    # URL 디코딩 (encodeURIComponent로 인코딩된 %23 -> # 변환)
+    job_url = unquote(job_url)
 
     # AWX URL과 Job 경로 추출
     # job_url 형식: http://192.168.64.26:30000/#/jobs/playbook/123
@@ -3070,11 +3237,20 @@ async def awx_oidc_redirect(job_url: str):
 
 # ==================== Frontend Static Files ====================
 
-# Frontend 빌드 파일 경로
-FRONTEND_BUILD_DIR = os.path.join(os.path.dirname(__file__), "../frontend/frontend/dist")
+# Frontend 빌드 파일 경로 (Docker에서는 static, 개발환경에서는 ../frontend/frontend/dist)
+FRONTEND_BUILD_DIR_DOCKER = os.path.join(os.path.dirname(__file__), "static")
+FRONTEND_BUILD_DIR_DEV = os.path.join(os.path.dirname(__file__), "../frontend/frontend/dist")
+
+# Docker 환경 우선, 개발 환경 폴백
+if os.path.exists(FRONTEND_BUILD_DIR_DOCKER):
+    FRONTEND_BUILD_DIR = FRONTEND_BUILD_DIR_DOCKER
+elif os.path.exists(FRONTEND_BUILD_DIR_DEV):
+    FRONTEND_BUILD_DIR = FRONTEND_BUILD_DIR_DEV
+else:
+    FRONTEND_BUILD_DIR = None
 
 # Static files (CSS, JS 등)
-if os.path.exists(FRONTEND_BUILD_DIR):
+if FRONTEND_BUILD_DIR and os.path.exists(FRONTEND_BUILD_DIR):
     app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_BUILD_DIR, "assets")), name="static")
 
     # 루트 경로와 모든 SPA 경로는 index.html 반환
